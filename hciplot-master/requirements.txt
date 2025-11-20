@@ -1,0 +1,6 @@
+numpy
+matplotlib>=3.7.0
+holoviews
+bokeh
+panel
+jinja2

@@ -1,0 +1,119 @@
+         1569986 function calls in 12.192 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.240    0.240   12.192   12.192 E:\TESIS\PACO-master\paco\processing\fastpaco.py:22(PACOCalc)
+    25356    8.661    0.000    9.216    0.000 E:\TESIS\PACO-master\paco\processing\paco.py:135(getPatch)
+        1    0.008    0.008    2.287    2.287 E:\TESIS\PACO-master\paco\processing\fastpaco.py:102(computeStatistics)
+      256    0.002    0.000    2.165    0.008 E:\TESIS\PACO-master\paco\util\util.py:164(pixelCalc)
+      256    0.127    0.000    2.091    0.008 E:\TESIS\PACO-master\paco\util\util.py:205(sampleCovariance)
+    25600    0.741    0.000    1.588    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:2680(cov)
+    78495    0.869    0.000    0.869    0.000 {built-in method numpy.array}
+    25600    0.120    0.000    0.782    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:415(average)
+    25600    0.016    0.000    0.298    0.000 {method 'mean' of 'numpy.ndarray' objects}
+    25856    0.124    0.000    0.288    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\_methods.py:118(_mean)
+    25600    0.014    0.000    0.264    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:367(broadcast_to)
+    27633    0.254    0.000    0.254    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+    25602    0.177    0.000    0.250    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:340(_broadcast_to)
+     1270    0.004    0.000    0.176    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:2338(sum)
+     1777    0.006    0.000    0.175    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:69(_wrapreduction)
+    25600    0.153    0.000    0.174    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\shape_base.py:380(stack)
+      251    0.121    0.000    0.130    0.001 E:\TESIS\PACO-master\paco\processing\paco.py:233(bl)
+      251    0.100    0.000    0.111    0.000 E:\TESIS\PACO-master\paco\processing\paco.py:223(al)
+    25600    0.056    0.000    0.071    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\numeric.py:1386(normalize_axis_tuple)
+    25856    0.052    0.000    0.060    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\_methods.py:76(_count_reduce_items)
+      256    0.018    0.000    0.032    0.000 E:\TESIS\PACO-master\paco\util\util.py:232(shrinkageFactor)
+    25600    0.011    0.000    0.032    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\shape_base.py:370(_stack_dispatcher)
+      256    0.020    0.000    0.031    0.000 E:\TESIS\PACO-master\paco\util\util.py:28(getRotatedPixels)
+    25602    0.019    0.000    0.027    0.000 {built-in method builtins.any}
+      256    0.019    0.000    0.023    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:496(inv)
+    25600    0.013    0.000    0.021    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\shape_base.py:208(_arrays_for_stack_dispatcher)
+    25602    0.018    0.000    0.018    0.000 {method 'copy' of 'numpy.ndarray' objects}
+   131074    0.018    0.000    0.018    0.000 {built-in method numpy.asanyarray}
+   103607    0.017    0.000    0.017    0.000 {built-in method builtins.len}
+    75304    0.015    0.000    0.015    0.000 {method 'append' of 'list' objects}
+    77056    0.015    0.000    0.015    0.000 {built-in method numpy.lib.array_utils.normalize_axis_index}
+   126512    0.013    0.000    0.013    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\multiarray.py:761(dot)
+    25602    0.008    0.000    0.012    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:339(iterable)
+    25600    0.011    0.000    0.011    0.000 {method 'conj' of 'numpy.ndarray' objects}
+    52480    0.010    0.000    0.010    0.000 {built-in method builtins.issubclass}
+    25602    0.010    0.000    0.010    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:24(_maybe_view_as_subclass)
+    54526    0.009    0.000    0.009    0.000 {built-in method builtins.isinstance}
+    51206    0.008    0.000    0.008    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:345(<genexpr>)
+    25600    0.008    0.000    0.008    0.000 {built-in method builtins.hasattr}
+    25600    0.008    0.000    0.008    0.000 {method 'squeeze' of 'numpy.ndarray' objects}
+    25602    0.007    0.000    0.007    0.000 {method '__exit__' of 'numpy.nditer' objects}
+      256    0.001    0.000    0.006    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:3735(mean)
+     1024    0.003    0.000    0.006    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_twodim_base_impl.py:245(diag)
+    25356    0.006    0.000    0.006    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:2118(shape)
+      256    0.006    0.000    0.006    0.000 E:\TESIS\PACO-master\paco\util\util.py:187(covariance)
+      768    0.001    0.000    0.005    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:1831(trace)
+    25602    0.005    0.000    0.005    0.000 {built-in method builtins.iter}
+    25856    0.004    0.000    0.004    0.000 {built-in method numpy.asarray}
+    25600    0.004    0.000    0.004    0.000 {built-in method _operator.index}
+      256    0.001    0.000    0.004    0.000 E:\TESIS\PACO-master\paco\util\util.py:222(diagSampleCovariance)
+    25600    0.004    0.000    0.004    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:2675(_cov_dispatcher)
+      768    0.004    0.000    0.004    0.000 {method 'trace' of 'numpy.ndarray' objects}
+    25600    0.003    0.000    0.003    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:410(_average_dispatcher)
+      256    0.003    0.000    0.003    0.000 E:\TESIS\PACO-master\paco\util\util.py:117(cartToPol)
+    25600    0.003    0.000    0.003    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:363(_broadcast_to_dispatcher)
+    25600    0.003    0.000    0.003    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\multiarray.py:180(concatenate)
+    25356    0.003    0.000    0.003    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:2114(_shape_dispatcher)
+      256    0.003    0.000    0.003    0.000 E:\TESIS\PACO-master\paco\util\util.py:155(gridPolToCart)
+    25602    0.002    0.000    0.002    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\multiarray.py:690(result_type)
+      256    0.000    0.000    0.002    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:3052(max)
+      768    0.001    0.000    0.002    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:1695(diagonal)
+      251    0.000    0.000    0.002    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:3190(min)
+      507    0.001    0.000    0.001    0.000 {method 'flatten' of 'numpy.ndarray' objects}
+      256    0.001    0.000    0.001    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:148(_commonType)
+      256    0.001    0.000    0.001    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\_ufunc_config.py:440(__enter__)
+      768    0.001    0.000    0.001    0.000 {method 'diagonal' of 'numpy.ndarray' objects}
+      512    0.001    0.000    0.001    0.000 {built-in method builtins.getattr}
+     1777    0.001    0.000    0.001    0.000 {method 'items' of 'dict' objects}
+      263    0.001    0.000    0.001    0.000 {built-in method numpy.zeros}
+      256    0.001    0.000    0.001    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_twodim_base_impl.py:49(fliplr)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\_ufunc_config.py:456(__exit__)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:123(_makearray)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:142(_realType)
+      256    0.000    0.000    0.000    0.000 {built-in method numpy._core._multiarray_umath._make_extobj}
+      256    0.000    0.000    0.000    0.000 {built-in method builtins.min}
+      256    0.000    0.000    0.000    0.000 {method 'set' of '_contextvars.ContextVar' objects}
+      256    0.000    0.000    0.000    0.000 {method 'astype' of 'numpy.ndarray' objects}
+      256    0.000    0.000    0.000    0.000 {method 'reset' of '_contextvars.ContextVar' objects}
+      512    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:128(isComplexType)
+     1270    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:2333(_sum_dispatcher)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:198(_assert_stacked_square)
+      256    0.000    0.000    0.000    0.000 {method '__array_wrap__' of 'numpy.ndarray' objects}
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:192(_assert_stacked_2d)
+        1    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:5117(meshgrid)
+        2    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\paco\util\util.py:58(createCircularMask)
+     1024    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_twodim_base_impl.py:241(_diag_dispatcher)
+      256    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+      768    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:1826(_trace_dispatcher)
+      256    0.000    0.000    0.000    0.000 {method 'get' of 'dict' objects}
+      768    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:1691(_diagonal_dispatcher)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\_ufunc_config.py:430(__init__)
+        3    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:5263(<genexpr>)
+      256    0.000    0.000    0.000    0.000 {built-in method builtins.abs}
+        2    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_index_tricks_impl.py:149(__getitem__)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:3730(_mean_dispatcher)
+        3    0.000    0.000    0.000    0.000 {built-in method builtins.print}
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:3047(_max_dispatcher)
+      251    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\_core\fromnumeric.py:3185(_min_dispatcher)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\linalg\_linalg.py:492(_unary_dispatcher)
+      256    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_twodim_base_impl.py:45(_flip_dispatcher)
+        1    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:481(broadcast_arrays)
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+        6    0.000    0.000    0.000    0.000 C:\Users\cesar\anaconda3\Lib\encodings\cp1252.py:18(encode)
+        6    0.000    0.000    0.000    0.000 {built-in method numpy.arange}
+        6    0.000    0.000    0.000    0.000 {built-in method _codecs.charmap_encode}
+        1    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:413(_broadcast_shape)
+        2    0.000    0.000    0.000    0.000 {built-in method time.perf_counter}
+        2    0.000    0.000    0.000    0.000 {method 'reshape' of 'numpy.ndarray' objects}
+        4    0.000    0.000    0.000    0.000 {built-in method math.ceil}
+        1    0.000    0.000    0.000    0.000 {method 'is_integer' of 'float' objects}
+        1    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_stride_tricks_impl.py:477(_broadcast_arrays_dispatcher)
+        1    0.000    0.000    0.000    0.000 E:\TESIS\PACO-master\venv_paco_cuda\Lib\site-packages\numpy\lib\_function_base_impl.py:5112(_meshgrid_dispatcher)
+
+

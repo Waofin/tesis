@@ -1,0 +1,2 @@
+Method,CPUs,Mean_Time,Std_Time,Speedup,Efficiency,P_Estimated
+Serial,1,133.49250696666422,11.213080555143302,1.0,1.0,

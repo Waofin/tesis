@@ -1,0 +1,83 @@
+{
+  "results": {
+    "serial": [
+      {
+        "time": 66.18237429999863,
+        "trial": 1
+      },
+      {
+        "time": 71.14466249999532,
+        "trial": 2
+      },
+      {
+        "time": 63.768179200000304,
+        "trial": 3
+      }
+    ],
+    "multiprocessing": {
+      "1": [],
+      "2": [],
+      "4": [],
+      "8": [],
+      "16": []
+    },
+    "loky": {
+      "1": [],
+      "2": [],
+      "4": [],
+      "8": [],
+      "16": []
+    },
+    "config": {
+      "nFrames": 50,
+      "image_size": [
+        100,
+        100
+      ],
+      "angles_range": 60,
+      "patch_size": 49,
+      "psf_rad": 4,
+      "sigma": 2.0,
+      "n_trials": 3,
+      "cpu_counts": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "output_dir": "output/performance_analysis/"
+    },
+    "timestamp": "2025-11-12T04:23:44.356398"
+  },
+  "analysis": {
+    "serial": {
+      "mean_time": 67.03173866666475,
+      "std_time": 3.0707427265834726,
+      "trials": 3
+    },
+    "multiprocessing": {},
+    "loky": {},
+    "speedup_analysis": {}
+  },
+  "config": {
+    "nFrames": 50,
+    "image_size": [
+      100,
+      100
+    ],
+    "angles_range": 60,
+    "patch_size": 49,
+    "psf_rad": 4,
+    "sigma": 2.0,
+    "n_trials": 3,
+    "cpu_counts": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "output_dir": "output/performance_analysis/"
+  }
+}

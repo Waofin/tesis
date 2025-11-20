@@ -1,0 +1,87 @@
+{
+  "results": {
+    "serial": [
+      {
+        "time": 73.76767980000295,
+        "trial": 1
+      },
+      {
+        "time": 73.74315379999462,
+        "trial": 2
+      },
+      {
+        "time": 72.73893559999851,
+        "trial": 3
+      }
+    ],
+    "multiprocessing": {
+      "1": [],
+      "2": [],
+      "4": [],
+      "8": [],
+      "16": []
+    },
+    "loky": {
+      "1": [],
+      "2": [],
+      "4": [],
+      "8": [],
+      "16": []
+    },
+    "config": {
+      "nFrames": 50,
+      "image_size": [
+        100,
+        100
+      ],
+      "angles_range": 60,
+      "patch_size": 49,
+      "psf_rad": 4,
+      "sigma": 2.0,
+      "n_trials": 3,
+      "cpu_counts": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "output_dir": "output/performance_analysis/"
+    },
+    "timestamp": "2025-11-12T04:57:41.102260",
+    "skip_multiprocessing": false,
+    "in_notebook": false
+  },
+  "analysis": {
+    "serial": {
+      "mean_time": 73.41658973333203,
+      "std_time": 0.47927843298518336,
+      "trials": 3
+    },
+    "multiprocessing": {},
+    "loky": {},
+    "speedup_analysis": {},
+    "skip_multiprocessing": false,
+    "in_notebook": false
+  },
+  "config": {
+    "nFrames": 50,
+    "image_size": [
+      100,
+      100
+    ],
+    "angles_range": 60,
+    "patch_size": 49,
+    "psf_rad": 4,
+    "sigma": 2.0,
+    "n_trials": 3,
+    "cpu_counts": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "output_dir": "output/performance_analysis/"
+  }
+}

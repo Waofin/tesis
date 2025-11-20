@@ -1,0 +1,209 @@
+%Apoyo
+%%7. Desarrollo del Trabajo ( aqui se pueden extender)
+%Introduccion al capitulo, va entre el titulo del capitulo y la primera seccion.
+%7.1. Diseño de arquitectura
+%7.1.1. Configuración Inicial del Entorno
+%7.1.2. Arquitectura Implementación Final
+%7.2. Estructura del código
+%7.2.1. Backend
+%7.2.2. Frontend
+%7.3. Desarrollo del Software
+%7.3.1. Problemas Durante el Desarrollo
+%7.3.2. Pruebas, Optimización y Métricas Finales
+%7.5. Conclusión del Capítulo
+
+
+
+
+
+En el presente capítulo se explica el desafío abordado y la solución propuesta en este trabajo. Luego, se describen los algoritmos utilizados como base.Por último, se detalla el desarrollo del pipeline propuesto.
+
+%\section{Planificación de la experimentación}
+
+%\section{Problema a abordar}
+
+	
+%\section{Algoritmo utilizado: Método Formas de Contexto}
+%\subsubsection{Filtros aplicados}
+%\subsection{Capas superficiales}
+%\subsection{Viabilidad de una pose}
+%\subsection{Puntuación de la pose $\pi$}
+%Si la pose evaluada no presenta superposición grande o aguda, es puntuada empleando para ello el cálculo del BSA. Luego, se clasifica junto al resto de formas de contexto.
+
+%\subsection{Datos de Entrada}
+%\section{Softwares y lenguajes utilizados}
+%\subsection{Plataforma de Desarrollo}
+%\subsection{UCSF Chimera}
+%\subsection{Programa MSMS}
+%\subsection{Blender}
+%\subsection{Software VMD}
+%section{Lenguajes}
+\section{Metodología}
+Este trabajo busca abordar la brecha técnica identificada, proponiendo una solución híbrida combinando la eficiencia computacional de PACO y la robustez estadística de RSM que permita preprocesar de forma eficiente las imágenes y clasificar señales planetarias usando modelos bayesianos entrenables a gran escala. Para ello se pretende diseñar un pipeline modular que opera en tres secuenciales:
+\begin{enumerate}
+    \item Etapa de Preprocesamiento (PACO-GPU)
+        \begin{itemize}
+        \item Implementación paralelizada en CUDA \cite{7482491}
+        \item Kernel optimizado para operaciones de covarianza local
+        \item Gestión de memoria mediante paginación GPU-CPU
+        \end{itemize}
+    \item Etapa de Inferencia (RSM-VI)
+        \begin{itemize}
+        \item Modelo generativo con capa estocástica
+        \item Esquema de entrenamiento semi-supervisado
+        \item Regularización basada en física óptica
+        \end{itemize}
+    \item Etapa de Postprocesamiento   
+        \begin{itemize}
+        \item Filtrado espacial adaptativo
+        \item Clasificación probabilística
+        \item Generación de mapas de incertidumbre
+        \end{itemize}
+\end{enumerate}
+La solución propuesta se basa en pilares técnicos bien establecidos como:\\
+\begin{enumerate}
+    \item Procesamiento paralelo en GPU: Implementaremos PACO utilizando CUDA para acelerar las operaciones matriciales, aprovechando trabajos previos en procesamiento de imágenes astronómicas. Esto reduciría el tiempo de preprocesamiento considerablemente.\\\\
+    \item Inferencia variacional (VI): En lugar del tradicional MCMC (Markov Chain Monte Carlo) usado en RSM, aplicaremos técnicas de machine learning bayesiano que permiten entrenamiento distribuido [6]. VI aproxima distribuciones complejas mediante modelos más simples y optimizables por gradiente descendente.
+    \item Precisión numérica mixta: Combinaremos cálculos en FP16 y FP32 siguiendo estándares establecidos por NVIDIA , lo que reduce los requerimientos de memoria sin afectar significativamente la calidad de los resultados.\\\\
+\end{enumerate}
+
+
+\subsubsection{Especificaciones Técnicas}
+La mayoria de las funcionalidades necesarias se harán utilizando el VIP Package 1.6.6 cuyo repositorio es abierto \citep{VIP_github}, este tambien contiene datos de prueba a utilizar. 
+\section{Módulo PACO-GPU} El repositorio de PACO original, tambien abierto en github (no tiene version) que corresponde a \citep{PACO_github}
+\begin{enumerate}
+    \item Arquitectura: 3 capas de procesamiento paralelo
+        \begin{itemize}
+        \item Normalización y alineamiento
+        \item Descomposición PCA por bloques
+        \item Cálculo de covarianza local
+        \end{itemize}
+    \item Precisión numérica: FP16 para speckles, FP32 para señales    
+    \item Throughput: 42 imágenes/min (4096×4096 px)  
+\end{enumerate}
+\section{Módulo RSM-VI}
+\begin{enumerate}
+    \item Red bayesiana con 3 capas ocultas     
+    \item Función de pérdida: ELBO modificado \cite{sjölund2023tutorialparametricvariationalinference}
+    \item Optimizador: AdamW con warmup  
+    \item Tasa de aprendizaje: 1e-4 (decaimiento exponencial)    
+\end{enumerate}
+\section{Flujo de Datos} El pipeline maneja tres streams concurrentes.
+\begin{enumerate}
+    \item Stream de imágenes crudas (HDF5)    
+    \item Stream de parámetros instrumentales (JSON)
+    \item Stream de modelos pre-entrenados (ONNX)
+\end{enumerate}
+\section{Requisitos del Sistema} 
+\begin{enumerate}
+    \item Hardware: GPU NVIDIA con arquitectura Ampere+  
+    \item Software: CUDA 11.7, PyTorch 2.0+
+\end{enumerate}
+
+En la tabla \ref{tab:retos_solucion} se resumen los retos informáticos para las operaciones, el enfoque propuesto para cada uno de ellos y las tecnologías a utilizar.
+
+% Segunda tabla
+	\begin{table}[H]
+		\centering
+		\small
+		\begin{tabular}{p{5cm}p{5cm}p{5cm}}
+			\toprule
+			\textbf{Reto Computacional} &  
+                \textbf{Enfoque propuesto} &  
+                \textbf{Tecnologías Usadas}\\
+			\midrule
+			\textbf{Operaciones matriciales masivas}  & PACO en GPU     & CUDA, cuBLAS    \\
+			\midrule
+			\textbf{Inferencia lenta} & RSM con VI & PyTorch, Pyro     \\
+            \midrule
+            \textbf{Manejo de grandes datasets} & Pipelining eficiente & Dask, Memmap     \\
+			\midrule
+			\textbf{Precisión numérica} & FP16/FP32 mixtol & NVIDIA Tensor Cores     \\
+			\bottomrule
+		\end{tabular}
+        \caption{Retos Informáticos vs Solución propuesta}
+        \label{tab:retos_solucion}
+	\end{table}
+    \newpage
+\subsection{Diagrama de flujo de la solución propuesta}
+La Figura \ref{fig:diagrama-solucion} presenta el diagrama de flujo pipeline híbrido propuesto. Este diagrama ilustra las etapas principales del sistema y el flujo de datos entre ellas. Las formas romboidales representan estados intermedios de transformación de datos durante el procesamiento, no condiciones lógicas, sino puntos donde los datos cambian de formato o se integran múltiples flujos. Los colores del diagrama identifican las diferentes etapas: morado para PACO-GPU, rosado para RSM-VI, verde para postprocesamiento, y amarillo para entrada/salida del sistema.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm and 1.2cm,
+    box/.style={rectangle, rounded corners, minimum width=2cm, minimum height=0.6cm, text centered, draw=black, font=\scriptsize},
+    paco/.style={box, fill=blue!20},
+    rsm/.style={box, fill=purple!20},
+    post/.style={box, fill=green!20},
+    data/.style={diamond, aspect=2, minimum width=2cm, minimum height=0.6cm, text centered, draw=black, fill=orange!20, font=\scriptsize},
+    io/.style={box, fill=yellow!20},
+    arrow/.style={->, >=stealth, line width=0.5pt}
+]
+
+% Entrada
+\node (input) [io] {Entrada: Cubos FITS};
+
+% PACO-GPU - Primera fila
+\node (paco1) [paco, below=of input, xshift=-2.5cm] {Corrección píxeles};
+\node (paco2) [paco, right=of paco1] {Alineamiento};
+\node (paco3) [paco, right=of paco2] {PCA speckles};
+\node (paco4) [paco, right=of paco3] {Covarianza local};
+
+% Estado intermedio 1
+\node (inter1) [data, below=of paco2.south, xshift=0.6cm] {Imágenes procesadas};
+
+% RSM-VI - Segunda fila
+\node (rsm1) [rsm, below=of inter1, xshift=-1.8cm] {Modelo RSM};
+\node (rsm2) [rsm, right=of rsm1] {Inferencia VI};
+\node (rsm3) [rsm, right=of rsm2] {Optimización};
+\node (rsm4) [rsm, right=of rsm3] {Modelo jerárquico};
+
+% Estado intermedio 2
+\node (inter2) [data, below=of rsm2.south, xshift=0.6cm] {Mapas probabilidad};
+
+% Postprocesamiento - Tercera fila
+\node (post1) [post, below=of inter2, xshift=-1.2cm] {Clasificación};
+\node (post2) [post, right=of post1] {Mapas incertidumbre};
+\node (post3) [post, right=of post2] {Filtrado espacial};
+
+% Salida
+\node (output) [io, below=of post2] {Detecciones finales};
+
+% Conexiones principales
+\draw [arrow] (input) -- (paco1);
+\draw [arrow] (input) -- (paco2);
+\draw [arrow] (input) -- (paco3);
+\draw [arrow] (input) -- (paco4);
+
+\draw [arrow] (paco1) -- (inter1);
+\draw [arrow] (paco2) -- (inter1);
+\draw [arrow] (paco3) -- (inter1);
+\draw [arrow] (paco4) -- (inter1);
+
+\draw [arrow] (inter1) -- (rsm1);
+\draw [arrow] (inter1) -- (rsm2);
+\draw [arrow] (inter1) -- (rsm3);
+\draw [arrow] (inter1) -- (rsm4);
+
+\draw [arrow] (rsm1) -- (inter2);
+\draw [arrow] (rsm2) -- (inter2);
+\draw [arrow] (rsm3) -- (inter2);
+\draw [arrow] (rsm4) -- (inter2);
+
+\draw [arrow] (inter2) -- (post1);
+\draw [arrow] (inter2) -- (post2);
+\draw [arrow] (inter2) -- (post3);
+
+\draw [arrow] (post1) -- (output);
+\draw [arrow] (post2) -- (output);
+\draw [arrow] (post3) -- (output);
+
+\end{tikzpicture}
+\caption{Pipeline híbrido RSM-PACO para detección de exoplanetas. Los colores distinguen las etapas.}
+\label{fig:diagrama-solucion}
+\end{figure}
+
+
+
+%\textcolor{red}{La sección de pruebas y validaciones van en este capitulo}

@@ -1,0 +1,182 @@
+{
+  "results": {
+    "serial": [
+      {
+        "time": 60.45634710000013,
+        "trial": 1
+      },
+      {
+        "time": 72.27354070000001,
+        "trial": 2
+      },
+      {
+        "time": 51.81674170000042,
+        "trial": 3
+      }
+    ],
+    "multiprocessing": {
+      "1": [],
+      "2": [],
+      "4": [],
+      "8": [],
+      "16": []
+    },
+    "loky": {
+      "1": [],
+      "2": [
+        {
+          "time": 55.60309369999595,
+          "trial": 1
+        },
+        {
+          "time": 68.03643439999723,
+          "trial": 2
+        },
+        {
+          "time": 68.63722930000222,
+          "trial": 3
+        }
+      ],
+      "4": [
+        {
+          "time": 61.835154099993815,
+          "trial": 1
+        },
+        {
+          "time": 60.99808579999808,
+          "trial": 2
+        },
+        {
+          "time": 57.7118582999974,
+          "trial": 3
+        }
+      ],
+      "8": [
+        {
+          "time": 55.424089399995864,
+          "trial": 1
+        },
+        {
+          "time": 48.96207489999506,
+          "trial": 2
+        },
+        {
+          "time": 39.268991799996,
+          "trial": 3
+        }
+      ],
+      "16": [
+        {
+          "time": 50.35718060000363,
+          "trial": 1
+        },
+        {
+          "time": 59.57332380000298,
+          "trial": 2
+        },
+        {
+          "time": 55.15878640000301,
+          "trial": 3
+        }
+      ]
+    },
+    "config": {
+      "nFrames": 50,
+      "image_size": [
+        100,
+        100
+      ],
+      "angles_range": 60,
+      "patch_size": 49,
+      "psf_rad": 4,
+      "sigma": 2.0,
+      "n_trials": 3,
+      "cpu_counts": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ],
+      "output_dir": "output/performance_analysis/"
+    },
+    "timestamp": "2025-11-12T04:53:19.315667",
+    "skip_multiprocessing": true,
+    "in_notebook": false
+  },
+  "analysis": {
+    "serial": {
+      "mean_time": 61.51554316666685,
+      "std_time": 8.384969829495622,
+      "trials": 3
+    },
+    "multiprocessing": {},
+    "loky": {
+      "2": {
+        "mean_time": 64.09225246666513,
+        "std_time": 6.007750608020452,
+        "speedup": 0.9597968677830687,
+        "efficiency": 0.47989843389153436,
+        "p_estimated": 0,
+        "trials": 3
+      },
+      "4": {
+        "mean_time": 60.18169939999643,
+        "std_time": 1.7795612060557235,
+        "speedup": 1.0221636108645762,
+        "efficiency": 0.25554090271614405,
+        "p_estimated": 0.028910715308846435,
+        "trials": 3
+      },
+      "8": {
+        "mean_time": 47.885052033328975,
+        "std_time": 6.639115317965768,
+        "speedup": 1.284650231221442,
+        "efficiency": 0.16058127890268026,
+        "p_estimated": 0.2532320020353354,
+        "trials": 3
+      },
+      "16": {
+        "mean_time": 55.02976360000321,
+        "std_time": 3.7635806561405865,
+        "speedup": 1.1178594844384042,
+        "efficiency": 0.06986621777740026,
+        "p_estimated": 0.11246206267518741,
+        "trials": 3
+      }
+    },
+    "speedup_analysis": {
+      "p_mean": 0.13153492667312308,
+      "p_std": 0.0925665185167572,
+      "theoretical_speedup": {
+        "1": 1.0,
+        "2": 1.0703973162521683,
+        "4": 1.109448411600626,
+        "8": 1.1300623328234973,
+        "16": 1.1406592472992427
+      }
+    },
+    "skip_multiprocessing": true,
+    "in_notebook": false
+  },
+  "config": {
+    "nFrames": 50,
+    "image_size": [
+      100,
+      100
+    ],
+    "angles_range": 60,
+    "patch_size": 49,
+    "psf_rad": 4,
+    "sigma": 2.0,
+    "n_trials": 3,
+    "cpu_counts": [
+      1,
+      2,
+      4,
+      8,
+      16
+    ],
+    "output_dir": "output/performance_analysis/"
+  }
+}

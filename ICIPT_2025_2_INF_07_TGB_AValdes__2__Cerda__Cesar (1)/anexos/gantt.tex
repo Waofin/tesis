@@ -1,0 +1,81 @@
+{
+\begin{landscape}
+\section{Carta Gantt}
+\begin{center}
+\definecolor{activityred}{RGB}{204,0,0}
+\begin{ganttchart}[
+    vgrid={*1{draw=black!20, line width=0.5pt}},
+    hgrid={*1{draw=black!20, line width=0.5pt}},
+    x unit=0.4cm,
+    y unit title=0.6cm,
+    y unit chart=0.4cm,
+    bar/.append style={fill=activityred, draw=none},
+    bar height=0.6,
+    bar label font=\footnotesize,
+    title height=0.7,
+    title label font=\footnotesize,
+    progress label text={},
+    group right shift=0,
+    group top shift=0.4,
+    group height=0.3
+]{1}{20} % 5 meses × 4 semanas = 20 unidades
+
+% Títulos de los años
+\gantttitle{2025}{20} \\
+
+% Títulos de los meses (Mes 8 a Mes 12)
+\gantttitle{Agosto}{4}
+\gantttitle{Septiembre}{4}
+\gantttitle{Octubre}{4}
+\gantttitle{Noviembre}{4}
+\gantttitle{Diciembre}{4} \\
+
+% Actividades principales
+\ganttgroup[name=g_group1]{1. Desarrollo de Algoritmos y Benchmark Inicial}{1}{4} \\
+\ganttbar[name=bar1_1]{1.1. Implementación PACO (CUDA, VIP)}{1}{3} \\
+\ganttbar[name=bar1_2]{1.2. Implementación RSM (VI, PyTorch)}{1}{3} \\
+\ganttbar[name=bar1_3]{1.3. Benchmarks iniciales individuales}{3}{4} \\[grid]
+
+\ganttgroup[name=g_group2]{2. Integración del Pipeline Híbrido}{5}{8} \\
+\ganttbar[name=bar2_1]{2.1. Desarrollo y ensamblaje pipeline}{5}{7} \\
+\ganttbar[name=bar2_2]{2.2. Optimización memoria GPU y flujo de datos}{6}{8} \\
+\ganttbar[name=bar2_3]{2.3. Calibración y pruebas de integración}{7}{8} \\[grid]
+
+\ganttgroup[name=g_group3]{3. Validación y Evaluación Exhaustiva}{9}{12} \\
+\ganttbar[name=bar3_1]{3.1. Implementación métricas (FDR/MDR, ROC)}{9}{10} \\
+\ganttbar[name=bar3_2]{3.2. Benchmarks de rendimiento pipeline}{10}{11} \\
+\ganttbar[name=bar3_3]{3.3. Validación con datos reales}{11}{12} \\
+\ganttbar[name=bar3_4]{3.4. Análisis de sensibilidad y robustez}{12}{12} \\[grid]
+
+\ganttgroup[name=g_group4]{4. Documentación Técnica y Redacción Informe Final}{13}{16} \\
+\ganttbar[name=bar4_1]{4.1. Redacción informe final}{13}{15} \\
+\ganttbar[name=bar4_2]{4.2. Documentación código fuente}{13}{16} \\
+\ganttbar[name=bar4_3]{4.3. Comparación sistemática con estado del arte}{14}{16} \\[grid]
+
+\ganttgroup[name=g_group5]{5. Preparación y Defensa de Título}{17}{20} \\
+\ganttbar[name=bar5_1]{5.1. Preparación presentación}{17}{19} \\
+\ganttbar[name=bar5_2]{5.2. Defensa formal}{20}{20}
+
+% Enlaces (ajustados a las nuevas posiciones y duraciones)
+% Enlaces entre sub-tareas dentro de un grupo (opcional, si se requiere un flujo más detallado)
+\ganttlink{bar1_1}{bar1_2} % PACO to RSM (conceptual link)
+\ganttlink{bar1_2}{bar1_3} % RSM to Benchmarks
+\ganttlink{bar2_1}{bar2_2} % Desarrollo pipeline to Optimización
+\ganttlink{bar2_2}{bar2_3} % Optimización to Calibración
+\ganttlink{bar3_1}{bar3_2} % Métricas to Benchmarks
+\ganttlink{bar3_2}{bar3_3} % Benchmarks to Validación
+\ganttlink{bar3_3}{bar3_4} % Validación to Análisis
+\ganttlink{bar4_1}{bar4_2} % Redacción to Documentación
+\ganttlink{bar4_2}{bar4_3} % Documentación to Comparación
+\ganttlink{bar5_1}{bar5_2} % Preparación to Defensa
+
+% Enlaces entre grupos principales (referenciando el inicio de cada grupo)
+\ganttlink{g_group1}{g_group2}
+\ganttlink{g_group2}{g_group3}
+\ganttlink{g_group3}{g_group4}
+\ganttlink{g_group4}{g_group5}
+
+\end{ganttchart}
+\end{center}
+\end{landscape}
+}
