@@ -1,0 +1,134 @@
+  \documentclass[final,letterpaper,oneside,authoryear,11pt,singlespace,spanish]{ezthesis}
+\input{Macros.tex}
+
+\newcommand{\qed}{\nobreak \ifvmode \relax \else
+      \ifdim\lastskip<1.5em \hskip-\lastskip
+      \hskip1.5em plus0em minus0.5em \fi \nobreak
+      \vrule height0.75em width0.5em depth0.25em\fi}
+
+\author{César Cerda Rifo}
+\title{Detección y caracterización de exoplanetas mediante un híbrido de los algoritmos rsm-paco en observación directa\\
+    Curso de AnteProyecto de Título}
+\degree{Ingeniería Civil Informática}
+%\degree{Ingeniería en Ejecución en Computación e Informática}
+
+
+\supervisor{Tatiana Gutiérrez-Bunster y Alejandro Valdés Jiménez}
+\institution{Universidad del Bío-Bío, Chile}
+\faculty{Facultad de Ciencias Empresariales}
+\department{Departamento de Sistemas de Información}
+
+
+\begin{document}
+\hyphenation{com-pu-ta-dor}
+\cleardoublepage
+\pagenumbering{roman}
+\setcounter{page}{1}
+%% En esta secci'on se describe la estructura del documento de la tesis.
+%% Consulta los reglamentos de tu universidad para determinar el orden
+%% y la cantidad de secciones que debes de incluir
+
+%% # Portada de la tesis #
+%% Mirar el archivo "titlepage.tex" para los detalles.
+
+\include{titlepage}
+
+%% # Prefacios #
+%% Por cada prefacio (p.e. agradecimientos, resumen, etc.) crear
+%% un nuevo archivo e incluirlo aqu'i
+
+
+%\include{resumen}
+%\input{capitulos/resumen}
+%\input{capitulos/dedicatoria}
+%\input{capitulos/acronimos.tex}
+
+\tableofcontents
+%\listoffigures
+\renewcommand{\listfigurename}{Índice de Figuras}
+\listoffigures
+\renewcommand{\listtablename}{Índice de Tablas}
+\listoftables
+
+\cleardoublepage
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+\acrodef{VB}{Visula Basic}
+\acrodef{FP}{Formación Profesional}
+\acrodef{SIDA}{Síndrome de Inmunodeficiencia Adquirida}
+
+\chapter{Presentación del área}  \label{cap:introduccion}
+\input{capitulos/1introduccion}
+
+\chapter{Bases Teóricas y Antecedentes en los que se basa la Investigación} \label{cap:marco_teorico}
+\input{capitulos/2marco}
+
+\chapter{Estado del Arte} \input{capitulos/3estado}
+\label{cap:estado_del_arte}
+
+\chapter{Desarrollo del Trabajo} \label{cap:metodologia}
+\input{capitulos/4metodologia}
+
+%\chapter{Resultados}  \label{cap:aplicacion}
+%\input{capitulos/5resultados}
+
+\chapter{Conclusiones y Planificación Futura} \label{cap:conclusion}
+\input{capitulos/6conclusiones}
+
+\bibliographystyle{Thesis}
+% \bibliography{bibfile}
+\bibliography{bibliografia}
+
+
+
+
+\appendix
+
+\chapter{Plan de Trabajo y Carta Gantt}
+\section{Plan de Trabajo}
+\label{sec:plan_trabajo}
+
+El siguiente plan de trabajo detalla las actividades planificadas para la finalización del proyecto, con una duración de cinco meses para el segundo semestre.
+
+\begin{itemize}[leftmargin=*,labelsep=0.5cm]
+    \item \textbf{Mes 8 (Agosto): Desarrollo Final de Algoritmos y Benchmark Inicial}
+    \begin{itemize}
+        \item Implementación de mejoras en PACO (CUDA, VIP).
+        \item Implementación de RSM con Inferencia Variacional (PyTorch/Pyro).
+        \item Realización de benchmarks iniciales y comparativos de los algoritmos mejorados versus versiones base.
+        \item Análisis de rendimientos y limitaciones de las implementaciones individuales.
+    \end{itemize}
+    \item \textbf{Mes 9 (Septiembre): Integración del Pipeline Híbrido}
+    \begin{itemize}
+        \item Desarrollo y ensamblaje del pipeline híbrido RSM-PACO.
+        \item Optimización avanzada del manejo de memoria GPU y flujo de datos.
+        \item Calibración y ajuste del pipeline con datos sintéticos.
+        \item Implementación de pruebas unitarias y depuración del sistema integrado.
+    \end{itemize}
+    \item \textbf{Mes 10 (Octubre): Validación y Evaluación}
+    \begin{itemize}
+        \item Implementación de métricas de desempeño (FDR, MDR, análisis ROC).
+        \item Ejecución de benchmarks de rendimiento para el pipeline completo.
+        \item Validación del método propuesto con datos reales de telescopios (SPHERE/VLT, JWST).
+        \item Análisis de sensibilidad y robustez del método híbrido.
+    \end{itemize}
+    \item \textbf{Mes 11 (Noviembre): Documentación Técnica y Redacción del Informe Final}
+    \begin{itemize}
+        \item Redacción del informe final del proyecto de título.
+        \item Documentación técnica completa del código fuente desarrollado.
+        \item Comparación sistemática del pipeline híbrido con técnicas del estado del arte.
+    \end{itemize}
+    \item \textbf{Mes 12 (Diciembre): Presentación y Defensa de Título}
+    \begin{itemize}
+        \item Preparación de la presentación oral para la defensa de título.
+        \item Práctica y ajuste de la exposición.
+        \item Defensa formal del proyecto de título.
+    \end{itemize}
+\end{itemize}
+
+\newpage
+\label{anexo:Gantt}
+\input{anexos/gantt.tex}
+
+\end{document}
