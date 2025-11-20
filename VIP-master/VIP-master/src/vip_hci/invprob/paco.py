@@ -26,6 +26,11 @@ import numpy as np
 from scipy import ndimage
 from scipy.ndimage import filters
 
+try:
+    import cupy as cp  # type: ignore
+except ImportError:  # pragma: no cover - optional dependency
+    cp = None
+
 from ..config.utils_conf import iterable
 from ..config.utils_conf import pool_map
 from ..fm import normalize_psf
@@ -43,7 +48,47 @@ from ..var.coords import pol_to_cart
 #from multiprocessing import Pool
 __author__ = "Evert Nasedkin"
 __all__ = ['FastPACO',
-           'FullPACO']
+           'FullPACO',
+           'enable_paco_gpu_backend',
+           'is_paco_gpu_enabled']
+
+_GPU_BACKEND_ENABLED = False
+_GPU_BACKEND_DEVICE = None
+
+
+def enable_paco_gpu_backend(enable: bool = True,
+                            device: Optional[Union[int, str]] = None) -> None:
+    """
+    Toggle the optional CuPy-based GPU backend for PACO's covariance engine.
+
+    The mathematical operations remain identical to the CPU implementation
+    (cf. [FLA18]_, Sect. 3.3), but they are executed with CuPy primitives so they
+    can be offloaded to NVIDIA GPUs (e.g. T4) for significant acceleration.
+
+    Parameters
+    ----------
+    enable : bool, optional
+        Set True to enable the GPU backend, False to fall back to NumPy.
+    device : int or str, optional
+        Identifier understood by ``cupy.cuda.Device`` (e.g. 0 or ``'cuda:0'``).
+    """
+    global _GPU_BACKEND_ENABLED, _GPU_BACKEND_DEVICE
+    if enable:
+        if cp is None:
+            raise ImportError(
+                "CuPy is required to enable the PACO GPU backend but is not installed.")
+        if device is not None:
+            cp.cuda.Device(device).use()
+            _GPU_BACKEND_DEVICE = device
+        _GPU_BACKEND_ENABLED = True
+    else:
+        _GPU_BACKEND_ENABLED = False
+        _GPU_BACKEND_DEVICE = None
+
+
+def is_paco_gpu_enabled() -> bool:
+    """Return True when the PACO GPU backend is active."""
+    return _GPU_BACKEND_ENABLED
 
 
 class PACO:
@@ -1238,9 +1283,11 @@ def compute_statistics_at_pixel(
 
     if patch is None:
         return None, None
-    T = patch.shape[0]
-    #size = patch.shape[1]
 
+    if _GPU_BACKEND_ENABLED:
+        return _compute_statistics_at_pixel_gpu(patch)
+
+    T = patch.shape[0]
     # Calculate the mean of the column
     m = np.mean(patch, axis=0)
     # Calculate the covariance matrix
@@ -1250,6 +1297,22 @@ def compute_statistics_at_pixel(
     C = covariance(rho, S, F)
     Cinv = np.linalg.inv(C)
     return m, Cinv
+
+
+def _compute_statistics_at_pixel_gpu(
+        patch: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """GPU equivalent of :func:`compute_statistics_at_pixel` using CuPy."""
+    if cp is None:
+        raise ImportError("CuPy is required for GPU acceleration.")
+    g_patch = cp.asarray(patch, dtype=cp.float64)
+    T = g_patch.shape[0]
+    g_m = cp.mean(g_patch, axis=0)
+    g_S = _sample_covariance_gpu(g_patch, g_m, T)
+    rho = _shrinkage_factor_gpu(g_S, T)
+    g_F = _diagsample_covariance_gpu(g_S)
+    g_C = _covariance_gpu(rho, g_S, g_F)
+    g_Cinv = cp.linalg.inv(g_C)
+    return cp.asnumpy(g_m), cp.asnumpy(g_Cinv)
 
 
 def covariance(rho: np.ndarray, S: np.ndarray, F: np.ndarray) -> np.ndarray:
@@ -1278,6 +1341,41 @@ def covariance(rho: np.ndarray, S: np.ndarray, F: np.ndarray) -> np.ndarray:
 
     C = (1.0-rho)*S + rho*F
     return C
+
+
+def _sample_covariance_gpu(r: 'cp.ndarray', m: 'cp.ndarray',
+                           T: int) -> 'cp.ndarray':
+    """
+    GPU implementation of :func:`sample_covariance` using CuPy.
+
+    The expression is equivalent to eq. (4) in [FLA18]_ but leverages
+    matrix multiplication on the device: Ĉ = (1/T) * (R - μ)^T (R - μ).
+    """
+    diff = r - m
+    return diff.T @ diff / T
+
+
+def _diagsample_covariance_gpu(S: 'cp.ndarray') -> 'cp.ndarray':
+    """GPU analogue of :func:`diagsample_covariance`."""
+    return cp.diag(cp.diag(S))
+
+
+def _shrinkage_factor_gpu(S: 'cp.ndarray', T: int) -> float:
+    """GPU analogue of :func:`shrinkage_factor` (see [FLA18]_, eq. (9))."""
+    dot_ss = cp.trace(S @ S)
+    tr_s = cp.trace(S)
+    diag_s = cp.diag(S)
+    top = dot_ss + tr_s**2 - 2.0 * cp.sum(S**2.0)
+    bot = (T + 1.0) * (dot_ss - cp.sum(diag_s**2.0))
+    rho = top / bot
+    rho = cp.clip(rho, 0.0, 1.0)
+    return float(rho.get())
+
+
+def _covariance_gpu(rho: float, S: 'cp.ndarray',
+                    F: 'cp.ndarray') -> 'cp.ndarray':
+    """GPU analogue of :func:`covariance`."""
+    return (1.0 - rho) * S + rho * F
 
 
 def sample_covariance(r: np.ndarray, m: np.ndarray,
