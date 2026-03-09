@@ -18,6 +18,7 @@ Last updated 2022-05-09 by Evert Nasedkin (nasedkinevert@gmail.com).
 import sys
 from abc import abstractmethod
 from typing import Callable
+from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -905,12 +906,36 @@ class PACO:
         # *** SERIAL ***
         # Loop over all pixels
         # i is the same as theta_k in the PACO paper
-        for p0 in phi0s:
-            apatch = self.get_patch(p0)
-            # For some black magic reason this needs to be inverted here.
-            m[p0[1]][p0[0]], Cinv[p0[1]][p0[0]
-                                         ] = compute_statistics_at_pixel(apatch)
-            patch[p0[1]][p0[0]] = apatch
+        if _GPU_BACKEND_ENABLED and cp is not None:
+            valid_patches: List[np.ndarray] = []
+            valid_coords: List[Tuple[int, int]] = []
+
+            for p0 in phi0s:
+                apatch = self.get_patch(p0)
+                if apatch is None:
+                    continue
+                y, x = int(p0[1]), int(p0[0])
+                patch[y][x] = apatch
+                valid_patches.append(apatch)
+                valid_coords.append((y, x))
+
+            if valid_patches:
+                batch_size = 128
+                n_valid = len(valid_patches)
+                for start in range(0, n_valid, batch_size):
+                    end = min(start + batch_size, n_valid)
+                    batch = np.asarray(valid_patches[start:end], dtype=np.float64)
+                    m_batch, cinv_batch = _compute_statistics_batch_gpu(batch)
+                    for i, (y, x) in enumerate(valid_coords[start:end]):
+                        m[y][x] = m_batch[i]
+                        Cinv[y][x] = cinv_batch[i]
+        else:
+            for p0 in phi0s:
+                apatch = self.get_patch(p0)
+                # For some black magic reason this needs to be inverted here.
+                m[p0[1]][p0[0]], Cinv[p0[1]][p0[0]
+                                             ] = compute_statistics_at_pixel(apatch)
+                patch[p0[1]][p0[0]] = apatch
         return Cinv, m, patch
 
 
@@ -1312,6 +1337,65 @@ def _compute_statistics_at_pixel_gpu(
     g_F = _diagsample_covariance_gpu(g_S)
     g_C = _covariance_gpu(rho, g_S, g_F)
     g_Cinv = cp.linalg.inv(g_C)
+    return cp.asnumpy(g_m), cp.asnumpy(g_Cinv)
+
+
+def _compute_statistics_batch_gpu(
+        patches: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Batched GPU version of PACO statistics for multiple patches.
+
+    Parameters
+    ----------
+    patches : np.ndarray
+        Array with shape (N, T, P), where N is number of pixels,
+        T number of frames and P patch area.
+    """
+    if cp is None:
+        raise ImportError("CuPy is required for GPU acceleration.")
+
+    if patches.ndim != 3:
+        raise ValueError("patches must have shape (N, T, P)")
+
+    g_patch = cp.asarray(patches, dtype=cp.float64)
+    T = g_patch.shape[1]
+    patch_area = g_patch.shape[2]
+
+    g_m = cp.mean(g_patch, axis=1)  # (N, P)
+    diff = g_patch - g_m[:, cp.newaxis, :]  # (N, T, P)
+    g_S = cp.einsum('nti,ntj->nij', diff, diff) / T  # (N, P, P)
+
+    diag_s = cp.diagonal(g_S, axis1=1, axis2=2)  # (N, P)
+    g_F = cp.zeros_like(g_S)
+    idx = cp.arange(patch_area)
+    g_F[:, idx, idx] = diag_s
+
+    dot_ss = cp.einsum('nij,nji->n', g_S, g_S)
+    tr_s = cp.trace(g_S, axis1=1, axis2=2)
+    sum_s2 = cp.sum(g_S**2.0, axis=(1, 2))
+    sum_diag2 = cp.sum(diag_s**2.0, axis=1)
+
+    top = dot_ss + tr_s**2 - 2.0 * sum_s2
+    bot = (T + 1.0) * (dot_ss - sum_diag2)
+
+    rho = cp.zeros_like(top)
+    valid = cp.abs(bot) > 0
+    rho[valid] = top[valid] / bot[valid]
+    rho = cp.clip(rho, 0.0, 1.0)
+
+    g_C = (1.0 - rho)[:, cp.newaxis, cp.newaxis] * g_S + \
+        rho[:, cp.newaxis, cp.newaxis] * g_F
+
+    try:
+        g_Cinv = cp.linalg.inv(g_C)
+    except cp.linalg.LinAlgError:
+        g_Cinv = cp.empty_like(g_C)
+        for i in range(g_C.shape[0]):
+            try:
+                g_Cinv[i] = cp.linalg.inv(g_C[i])
+            except cp.linalg.LinAlgError:
+                g_Cinv[i] = cp.linalg.pinv(g_C[i])
+
     return cp.asnumpy(g_m), cp.asnumpy(g_Cinv)
 
 
