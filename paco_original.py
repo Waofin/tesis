@@ -15,11 +15,9 @@ Last updated 2022-05-09 by Evert Nasedkin (nasedkinevert@gmail.com).
      <https://ui.adsabs.harvard.edu/abs/2018A%26A...618A.138F/abstract>`_
 
 """
-import os
 import sys
 from abc import abstractmethod
 from typing import Callable
-from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -27,11 +25,6 @@ from typing import Union
 import numpy as np
 from scipy import ndimage
 from scipy.ndimage import filters
-
-try:
-    import cupy as cp  # type: ignore
-except ImportError:  # pragma: no cover - optional dependency
-    cp = None
 
 from ..config.utils_conf import iterable
 from ..config.utils_conf import pool_map
@@ -50,88 +43,7 @@ from ..var.coords import pol_to_cart
 #from multiprocessing import Pool
 __author__ = "Evert Nasedkin"
 __all__ = ['FastPACO',
-           'FullPACO',
-           'enable_paco_gpu_backend',
-           'is_paco_gpu_enabled']
-
-_GPU_BACKEND_ENABLED = False
-_GPU_BACKEND_DEVICE = None
-
-
-def enable_paco_gpu_backend(enable: bool = True,
-                            device: Optional[Union[int, str]] = None) -> None:
-    """
-    Toggle the optional CuPy-based GPU backend for PACO's covariance engine.
-
-    The mathematical operations remain identical to the CPU implementation
-    (cf. [FLA18]_, Sect. 3.3), but they are executed with CuPy primitives so they
-    can be offloaded to NVIDIA GPUs (e.g. T4) for significant acceleration.
-
-    Parameters
-    ----------
-    enable : bool, optional
-        Set True to enable the GPU backend, False to fall back to NumPy.
-    device : int or str, optional
-        Identifier understood by ``cupy.cuda.Device`` (e.g. 0 or ``'cuda:0'``).
-    """
-    global _GPU_BACKEND_ENABLED, _GPU_BACKEND_DEVICE
-    if enable:
-        if cp is None:
-            raise ImportError(
-                "CuPy is required to enable the PACO GPU backend but is not installed.")
-        if device is not None:
-            cp.cuda.Device(device).use()
-            _GPU_BACKEND_DEVICE = device
-        _GPU_BACKEND_ENABLED = True
-    else:
-        _GPU_BACKEND_ENABLED = False
-        _GPU_BACKEND_DEVICE = None
-
-
-def is_paco_gpu_enabled() -> bool:
-    """Return True when the PACO GPU backend is active."""
-    return _GPU_BACKEND_ENABLED
-
-
-def _resolve_gpu_batch_size(num_frames: int,
-                            patch_area_pixels: int,
-                            default: int = 64,
-                            minimum: int = 8,
-                            maximum: int = 256) -> int:
-    """
-    Heuristic batch-size tuner for GPU PACO kernels.l
-
-    Priority order:
-      1) `PACO_GPU_BATCH_SIZE` env var override (if valid int > 0)
-      2) Memory-based estimate from CuPy runtime free memory
-      3) Fallback to `default`
-    """
-    env_value = os.environ.get("PACO_GPU_BATCH_SIZE", "").strip()
-    if env_value:
-        try:
-            return max(minimum, min(maximum, int(env_value)))
-        except ValueError:
-            pass
-
-    if cp is None:
-        return default
-
-    try:
-        free_mem, _ = cp.cuda.runtime.memGetInfo()
-        # Conservative per-sample bytes estimate for batched PACOCalc path:
-        # g_c + g_m + g_p + tmp_a + diff + tmp_b (+ temporary overhead)
-        bytes_per_sample = 8 * (
-            (3 * num_frames * patch_area_pixels * patch_area_pixels) +
-            (6 * num_frames * patch_area_pixels) +
-            patch_area_pixels
-        )
-        safety_factor = 0.35
-        est = int((free_mem * safety_factor) / max(1, bytes_per_sample))
-        if est <= 0:
-            return default
-        return max(minimum, min(maximum, est))
-    except Exception:
-        return default
+           'FullPACO']
 
 
 class PACO:
@@ -388,8 +300,6 @@ class PACO:
         self.num_frames = self.cube.shape[0]
         self.width = self.cube.shape[2]
         self.height = self.cube.shape[1]
-        # Cache for local circular masks used by get_patch.
-        self._patch_mask_cache = {}
 
     # Set the template PSF
     def set_psf(self, psf: np.ndarray) -> None:
@@ -439,6 +349,10 @@ class PACO:
         """
         if width is None:
             width = self.patch_width
+        if mask is None:
+            mask = create_boolean_circular_mask(self.cube[0].shape,
+                                                radius=self.fwhm,
+                                                center=px)
         k = int(width/2)
         if width % 2 != 0:
             k2 = k+1
@@ -447,30 +361,8 @@ class PACO:
         nx, ny = np.shape(self.cube[0])[:2]
         if px[0]+k2 > nx or px[0]-k < 0 or px[1]+k2 > ny or px[1]-k < 0:
             return np.ones((self.num_frames, self.patch_area_pixels))*np.nan
-
-        # Fast path: local window extraction + local circular mask.
-        # This avoids creating a full-frame boolean mask for every pixel.
-        if mask is None:
-            key = (int(width), float(self.fwhm))
-            cache = getattr(self, "_patch_mask_cache", None)
-            if cache is None:
-                cache = {}
-                self._patch_mask_cache = cache
-            local_mask = cache.get(key)
-            if local_mask is None:
-                yy, xx = np.indices((width, width))
-                c = (width - 1) / 2.0
-                local_mask = ((yy - c)**2 + (xx - c)**2) <= (self.fwhm**2)
-                cache[key] = local_mask
-
-            patch_window = self.cube[:, px[0]-k:px[0]+k2, px[1]-k:px[1]+k2]
-            patch = patch_window[:, local_mask].reshape(self.num_frames, -1)
-            return patch
-
-        # Backward-compatible path when a custom global mask is supplied.
-        patch = self.cube[np.broadcast_to(mask, self.cube.shape)].reshape(
-            self.num_frames, self.patch_area_pixels
-        )
+        patch = self.cube[np.broadcast_to(mask, self.cube.shape)]\
+            .reshape(self.num_frames, self.patch_area_pixels)
         return patch
 
     def set_scale(self, scale: float) -> None:
@@ -539,7 +431,6 @@ class PACO:
         mask = create_boolean_circular_mask(self.psf.shape, self.fwhm)
         self.patch_area_pixels = self.psf[mask].shape[0]
         self.patch_width = 2*int(self.fwhm) + 3
-        self._patch_mask_cache = {}
 
     """
     Math Functions
@@ -607,14 +498,6 @@ class PACO:
         a : numpy.ndarray
             a_l from equation 15 of [FLA18]_.
         """
-        h_arr = np.asarray(hfl, dtype=np.float64)
-        c_arr = np.asarray(Cfl_inv, dtype=np.float64)
-
-        # Vectorized formulation:
-        # a = sum_l h_l^T C_l^{-1} h_l
-        if h_arr.ndim == 2 and c_arr.ndim == 3:
-            return np.einsum('li,lij,lj->', h_arr, c_arr, h_arr, optimize=True)
-
         if method == "einsum":
             d1 = np.einsum('ijk,gj', Cfl_inv, hfl)
             return np.einsum('ml,ml', hfl, np.diagonal(d1).T)
@@ -654,16 +537,6 @@ class PACO:
             b_l from equation 16 of [FLA18]_.
 
         """
-        h_arr = np.asarray(hfl, dtype=np.float64)
-        c_arr = np.asarray(Cfl_inv, dtype=np.float64)
-        r_arr = np.asarray(r_fl, dtype=np.float64)
-        m_arr = np.asarray(m_fl, dtype=np.float64)
-
-        # Vectorized formulation:
-        # b = sum_l h_l^T C_l^{-1} (r_l - m_l)
-        if h_arr.ndim == 2 and c_arr.ndim == 3 and r_arr.ndim == 2 and m_arr.ndim == 2:
-            return np.einsum('li,lij,lj->', h_arr, c_arr, (r_arr - m_arr), optimize=True)
-
         if method == "einsum":
             d1 = np.einsum('ijk,gj', Cfl_inv, r_fl-m_fl)
             return np.einsum('ml,ml', hfl, np.diagonal(d1).T)
@@ -987,42 +860,12 @@ class PACO:
         # *** SERIAL ***
         # Loop over all pixels
         # i is the same as theta_k in the PACO paper
-        if _GPU_BACKEND_ENABLED and cp is not None:
-            valid_patches: List[np.ndarray] = []
-            valid_coords: List[Tuple[int, int]] = []
-
-            for p0 in phi0s:
-                apatch = self.get_patch(p0)
-                if apatch is None:
-                    continue
-                y, x = int(p0[1]), int(p0[0])
-                patch[y][x] = apatch
-                valid_patches.append(apatch)
-                valid_coords.append((y, x))
-
-            if valid_patches:
-                batch_size = _resolve_gpu_batch_size(
-                    num_frames=self.num_frames,
-                    patch_area_pixels=self.patch_area_pixels,
-                    default=128,
-                    minimum=16,
-                    maximum=512
-                )
-                n_valid = len(valid_patches)
-                for start in range(0, n_valid, batch_size):
-                    end = min(start + batch_size, n_valid)
-                    batch = np.asarray(valid_patches[start:end], dtype=np.float64)
-                    m_batch, cinv_batch = _compute_statistics_batch_gpu(batch)
-                    for i, (y, x) in enumerate(valid_coords[start:end]):
-                        m[y][x] = m_batch[i]
-                        Cinv[y][x] = cinv_batch[i]
-        else:
-            for p0 in phi0s:
-                apatch = self.get_patch(p0)
-                # For some black magic reason this needs to be inverted here.
-                m[p0[1]][p0[0]], Cinv[p0[1]][p0[0]
-                                             ] = compute_statistics_at_pixel(apatch)
-                patch[p0[1]][p0[0]] = apatch
+        for p0 in phi0s:
+            apatch = self.get_patch(p0)
+            # For some black magic reason this needs to be inverted here.
+            m[p0[1]][p0[0]], Cinv[p0[1]][p0[0]
+                                         ] = compute_statistics_at_pixel(apatch)
+            patch[p0[1]][p0[0]] = apatch
         return Cinv, m, patch
 
 
@@ -1100,113 +943,48 @@ class FastPACO(PACO):
         # Create arrays needed for storage
         # Store for each image pixel, for each temporal frame an image
         # for patches: for each time, we need to store a column of patches
-        if self.verbose:
-            print("Running Fast PACO...")
-
-        # Reuse invariant objects across test pixels.
-        frame_idx = np.arange(self.num_frames, dtype=np.int64)
-        psf_flat = normalised_psf[psf_mask]
 
         # Currently forcing integer grid, but meshgrid takes floats as
         # arguments...
         x, y = np.meshgrid(np.arange(-dim, dim), np.arange(-dim, dim))
+        if self.verbose:
+            print("Running Fast PACO...")
 
-        # Precompute rotated trajectories and validity mask.
-        # Keep both floating trajectories (for subpixel PSF shift) and integer
-        # indices (for patch/covariance indexing), mirroring original FastPACO.
-        angles_all_float = np.zeros((npx, self.num_frames, 2), dtype=np.float64)
-        angles_all_int = np.zeros((npx, self.num_frames, 2), dtype=np.int64)
-        valid_mask = np.zeros(npx, dtype=bool)
+        # Loop over all pixels
+        # i is the same as theta_k in the PACO paper
         for i, p0 in enumerate(phi0s):
-            ang = get_rotated_pixel_coords(x, y, p0, self.angles)
-            # Keep the original FastPACO validity rule.
-            if (int(np.max(ang.flatten())) >= self.width or
-                    int(np.min(ang.flatten())) < 0):
+            # Get Angles
+            angles_px = get_rotated_pixel_coords(x, y, p0, self.angles)
+            # Ensure within image bounds
+            if(int(np.max(angles_px.flatten())) >= self.width or
+               int(np.min(angles_px.flatten())) < 0):
                 a[i] = np.nan
                 b[i] = np.nan
                 continue
-            angles_all_float[i] = ang
-            angles_all_int[i, :, 0] = ang[:, 0].astype(np.int64)
-            angles_all_int[i, :, 1] = ang[:, 1].astype(np.int64)
-            valid_mask[i] = True
 
-        # GPU batched path for benchmark configuration:
-        # no subpixel astrometry => same PSF vector across all frames.
-        if (_GPU_BACKEND_ENABLED and cp is not None and
-                not use_subpixel_psf_astrometry and np.any(valid_mask)):
-            h_cp = cp.asarray(psf_flat, dtype=cp.float64)
-            valid_idx = np.flatnonzero(valid_mask)
-            batch_size = _resolve_gpu_batch_size(
-                num_frames=self.num_frames,
-                patch_area_pixels=self.patch_area_pixels,
-                default=64,
-                minimum=8,
-                maximum=256
-            )
-            if self.verbose:
-                print(f"PACO GPU batch size: {batch_size}")
-
-            for start in range(0, len(valid_idx), batch_size):
-                idx = valid_idx[start:start + batch_size]
-                ang_y = angles_all_int[idx, :, 0]
-                ang_x = angles_all_int[idx, :, 1]
-
-                # Gather per-frame statistics for this chunk.
-                cin_chunk = Cinv[ang_y, ang_x]                          # (B, T, P, P)
-                m_chunk = m[ang_y, ang_x]                               # (B, T, P)
-                patch_chunk = patches[ang_y, ang_x, frame_idx[None, :]]  # (B, T, P)
-
-                g_c = cp.asarray(cin_chunk, dtype=cp.float64)
-                g_m = cp.asarray(m_chunk, dtype=cp.float64)
-                g_p = cp.asarray(patch_chunk, dtype=cp.float64)
-
-                # a = sum_t h^T C_t^{-1} h
-                tmp_a = cp.einsum('btij,j->bti', g_c, h_cp, optimize=True)
-                a_chunk = cp.einsum('bti,i->b', tmp_a, h_cp, optimize=True)
-
-                # b = sum_t h^T C_t^{-1}(r_t - m_t)
-                diff = g_p - g_m
-                tmp_b = cp.einsum('btij,btj->bti', g_c, diff, optimize=True)
-                b_chunk = cp.einsum('bti,i->b', tmp_b, h_cp, optimize=True)
-
-                a[idx] = cp.asnumpy(a_chunk)
-                b[idx] = cp.asnumpy(b_chunk)
-        else:
-            # CPU / subpixel fallback.
-            for i in np.flatnonzero(valid_mask):
-                ang_y = angles_all_int[i, :, 0]
-                ang_x = angles_all_int[i, :, 1]
-                angles_px_float = angles_all_float[i]
-
-                cin_arr = Cinv[ang_y, ang_x]                            # (T, P, P)
-                m_arr = m[ang_y, ang_x]                                 # (T, P)
-                patch_arr = patches[ang_y, ang_x, frame_idx]            # (T, P)
-
-                if not use_subpixel_psf_astrometry:
-                    h = psf_flat
-                    tmp_a = np.einsum('lij,j->li', cin_arr, h, optimize=True)
-                    a[i] = np.einsum('li,i->', tmp_a, h, optimize=True)
-                    diff = patch_arr - m_arr
-                    tmp_b = np.einsum('lij,lj->li', cin_arr, diff, optimize=True)
-                    b[i] = np.einsum('li,i->', tmp_b, h, optimize=True)
+            # Extract relevant patches and statistics
+            Cinlst = []
+            mlst = []
+            hlst = []
+            patch = []
+            for l, ang in enumerate(angles_px):
+                Cinlst.append(Cinv[int(ang[0]), int(ang[1])])
+                mlst.append(m[int(ang[0]), int(ang[1])])
+                if use_subpixel_psf_astrometry:
+                    offax = frame_shift(normalised_psf,
+                                        ang[1]-int(ang[1]),
+                                        ang[0]-int(ang[0]),
+                                        imlib='vip-fft',
+                                        interpolation='lanczos4',
+                                        border_mode='reflect')[psf_mask]
                 else:
-                    Cinlst = []
-                    mlst = []
-                    hlst = []
-                    patch = []
-                    for l, ang in enumerate(angles_px_float):
-                        Cinlst.append(cin_arr[l])
-                        mlst.append(m_arr[l])
-                        offax = frame_shift(normalised_psf,
-                                            ang[1]-int(ang[1]),
-                                            ang[0]-int(ang[0]),
-                                            imlib='vip-fft',
-                                            interpolation='lanczos4',
-                                            border_mode='reflect')[psf_mask]
-                        hlst.append(offax)
-                        patch.append(patch_arr[l])
-                    a[i] = self.al(hlst, Cinlst)
-                    b[i] = self.bl(hlst, Cinlst, patch, mlst)
+                    offax = normalised_psf[psf_mask]
+                hlst.append(offax)
+                patch.append(patches[int(ang[0]), int(ang[1]), l])
+
+            # Calculate a and b, matrices
+            a[i] = self.al(hlst, Cinlst)
+            b[i] = self.bl(hlst, Cinlst, patch, mlst)
         if self.verbose:
             print("Done")
         return a, b
@@ -1460,14 +1238,9 @@ def compute_statistics_at_pixel(
 
     if patch is None:
         return None, None
-
-    if _GPU_BACKEND_ENABLED:
-        return _compute_statistics_at_pixel_gpu(patch)
-
-    # Keep CPU path aligned with GPU backend and PACO equations.
-    # We use float64 to reduce numeric drift in covariance/inversion.
-    patch = np.asarray(patch, dtype=np.float64)
     T = patch.shape[0]
+    #size = patch.shape[1]
+
     # Calculate the mean of the column
     m = np.mean(patch, axis=0)
     # Calculate the covariance matrix
@@ -1477,75 +1250,6 @@ def compute_statistics_at_pixel(
     C = covariance(rho, S, F)
     Cinv = np.linalg.inv(C)
     return m, Cinv
-
-
-def _compute_statistics_at_pixel_gpu(
-        patch: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """GPU equivalent of :func:`compute_statistics_at_pixel` using CuPy."""
-    if cp is None:
-        raise ImportError("CuPy is required for GPU acceleration.")
-    g_patch = cp.asarray(patch, dtype=cp.float64)
-    T = g_patch.shape[0]
-    g_m = cp.mean(g_patch, axis=0)
-    g_S = _sample_covariance_gpu(g_patch, g_m, T)
-    rho = _shrinkage_factor_gpu(g_S, T)
-    g_F = _diagsample_covariance_gpu(g_S)
-    g_C = _covariance_gpu(rho, g_S, g_F)
-    g_Cinv = cp.linalg.inv(g_C)
-    return cp.asnumpy(g_m), cp.asnumpy(g_Cinv)
-
-
-def _compute_statistics_batch_gpu(
-        patches: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Batched GPU version of PACO statistics for multiple patches.
-
-    Parameters
-    ----------
-    patches : np.ndarray
-        Array with shape (N, T, P), where N is number of pixels,
-        T number of frames and P patch area.
-    """
-    if cp is None:
-        raise ImportError("CuPy is required for GPU acceleration.")
-
-    if patches.ndim != 3:
-        raise ValueError("patches must have shape (N, T, P)")
-
-    g_patch = cp.asarray(patches, dtype=cp.float64)
-    T = g_patch.shape[1]
-    patch_area = g_patch.shape[2]
-
-    g_m = cp.mean(g_patch, axis=1)  # (N, P)
-    diff = g_patch - g_m[:, cp.newaxis, :]  # (N, T, P)
-    # Match original CPU covariance convention:
-    # np.cov(np.stack((p_t, m)), rowvar=False, bias=False) == 0.5*outer(diff,diff)
-    g_S = 0.5 * cp.einsum('nti,ntj->nij', diff, diff) / T  # (N, P, P)
-
-    diag_s = cp.diagonal(g_S, axis1=1, axis2=2)  # (N, P)
-    g_F = cp.zeros_like(g_S)
-    idx = cp.arange(patch_area)
-    g_F[:, idx, idx] = diag_s
-
-    dot_ss = cp.einsum('nij,nji->n', g_S, g_S)
-    tr_s = cp.trace(g_S, axis1=1, axis2=2)
-    sum_s2 = cp.sum(g_S**2.0, axis=(1, 2))
-    sum_diag2 = cp.sum(diag_s**2.0, axis=1)
-
-    top = dot_ss + tr_s**2 - 2.0 * sum_s2
-    bot = (T + 1.0) * (dot_ss - sum_diag2)
-
-    rho = cp.zeros_like(top)
-    valid = cp.abs(bot) > 0
-    rho[valid] = top[valid] / bot[valid]
-    rho = cp.clip(rho, 0.0, 1.0)
-
-    g_C = (1.0 - rho)[:, cp.newaxis, cp.newaxis] * g_S + \
-        rho[:, cp.newaxis, cp.newaxis] * g_F
-
-    g_Cinv = cp.linalg.inv(g_C)
-
-    return cp.asnumpy(g_m), cp.asnumpy(g_Cinv)
 
 
 def covariance(rho: np.ndarray, S: np.ndarray, F: np.ndarray) -> np.ndarray:
@@ -1576,44 +1280,6 @@ def covariance(rho: np.ndarray, S: np.ndarray, F: np.ndarray) -> np.ndarray:
     return C
 
 
-def _sample_covariance_gpu(r: 'cp.ndarray', m: 'cp.ndarray',
-                           T: int) -> 'cp.ndarray':
-    """
-    GPU implementation of :func:`sample_covariance` using CuPy.
-
-    Keep parity with the historical CPU/original PACO implementation where
-    each term is built with:
-        np.cov(np.stack((p_t, m)), rowvar=False, bias=False)
-    This is algebraically equal to:
-        0.5 * (p_t - m)(p_t - m)^T
-    """
-    diff = r - m
-    return 0.5 * (diff.T @ diff) / T
-
-
-def _diagsample_covariance_gpu(S: 'cp.ndarray') -> 'cp.ndarray':
-    """GPU analogue of :func:`diagsample_covariance`."""
-    return cp.diag(cp.diag(S))
-
-
-def _shrinkage_factor_gpu(S: 'cp.ndarray', T: int) -> float:
-    """GPU analogue of :func:`shrinkage_factor` (see [FLA18]_, eq. (9))."""
-    dot_ss = cp.trace(S @ S)
-    tr_s = cp.trace(S)
-    diag_s = cp.diag(S)
-    top = dot_ss + tr_s**2 - 2.0 * cp.sum(S**2.0)
-    bot = (T + 1.0) * (dot_ss - cp.sum(diag_s**2.0))
-    rho = top / bot
-    rho = cp.clip(rho, 0.0, 1.0)
-    return float(rho.get())
-
-
-def _covariance_gpu(rho: float, S: 'cp.ndarray',
-                    F: 'cp.ndarray') -> 'cp.ndarray':
-    """GPU analogue of :func:`covariance`."""
-    return (1.0 - rho) * S + rho * F
-
-
 def sample_covariance(r: np.ndarray, m: np.ndarray,
                       T: np.ndarray) -> np.ndarray:
     """
@@ -1634,14 +1300,9 @@ def sample_covariance(r: np.ndarray, m: np.ndarray,
         Sample covariance
     """
 
-    # Keep exact mathematical parity with the historical/original PACO code:
-    #   S = (1/T) * sum_t cov([r_t, m])
-    # with np.cov(..., rowvar=False, bias=False), which is equivalent to:
-    #   S = (0.5/T) * (R - m)^T (R - m)
-    r = np.asarray(r, dtype=np.float64)
-    m = np.asarray(m, dtype=np.float64)
-    diff = r - m
-    S = 0.5 * (diff.T @ diff) / T
+    #S = (1.0/T)*np.sum([np.outer((p-m).ravel(),(p-m).ravel().T) for p in r], axis=0)
+    S = (1.0/T)*np.sum([np.cov(np.stack((p, m)),
+                               rowvar=False, bias=False) for p in r], axis=0)
     return S
 
 
