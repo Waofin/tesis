@@ -1,0 +1,161 @@
+% =========================================================
+% Análisis algorítmico comparativo: paco_original.py vs VIP-master/paco.py
+% Incluir con: \input{capitulos/analisis_paco_comparacion}
+% =========================================================
+
+\section{Modificaciones Algorítmicas en PACO: Versión Original vs. Versión Extendida}
+\label{sec:paco_diff}
+
+La versión extendida de PACO disponible en \texttt{VIP-master} mantiene la misma formulación estadística de \citet{Flasseur_2018}, pero introduce cuatro optimizaciones concretas respecto a la implementación original (\texttt{paco\_original.py}): un caché de máscaras para extracción de parches, vectorización tensorial de los estimadores $\hat{a}$ y $\hat{b}$, reformulación matricial de la covarianza muestral, y un backend GPU opcional mediante CuPy. A continuación se analiza cada cambio.
+
+% ---------------------------------------------------------
+\subsection{Extracción de Parches con Caché Local}
+% ---------------------------------------------------------
+
+La función \texttt{get\_patch} extrae la columna temporal de parches circulares centrada en un píxel de prueba $\theta_k$. En la versión original, cada invocación construye una máscara booleana del tamaño completo del frame ($H \times W$) y la propaga sobre el cubo completo via \texttt{broadcast}. En imágenes de $2048 \times 2048$ con $T=100$ frames, esto implica acceder a $T \times H \times W \approx 4 \times 10^8$ elementos por píxel evaluado.
+
+La versión extendida reemplaza esto por extracción de una ventana local de tamaño $w \times w$ (donde $w = 2 \cdot \text{FWHM} + 3$), aplicando sobre ella una máscara circular en coordenadas relativas que se almacena en caché. La clave del caché es la tupla \texttt{(w, fwhm)}, por lo que la máscara se computa exactamente una vez durante toda la ejecución:
+
+\begin{algorithm}[H]
+\caption{Extracción de parche -- versión extendida con caché}
+\label{alg:getpatch_nuevo}
+\Begin{
+    \texttt{if (px fuera de límites):  return NaN} \\
+    \quad \\
+    \texttt{// Recuperar máscara local desde caché (o crearla por primera vez)} \\
+    \texttt{key = (w, fwhm)} \\
+    \texttt{if key not in cache:} \\
+    \quad \texttt{yy, xx = indices((w, w));  c = (w-1)/2.0} \\
+    \quad \texttt{cache[key] = ((yy-c)² + (xx-c)²) ≤ fwhm²} \\
+    \quad \\
+    \texttt{// Extraer ventana local y aplicar máscara circular} \\
+    \texttt{window = cube[:, px[0]-k:px[0]+k2, px[1]-k:px[1]+k2]} \\
+    \texttt{return window[:, cache[key]].reshape(T, -1)}
+}
+\end{algorithm}
+
+El ahorro de memoria respecto a la versión original es un factor $\approx (H \cdot W) / w^2$, que en la práctica supera $10\,000\times$ para imágenes astronómicas típicas.
+
+% ---------------------------------------------------------
+\subsection{Vectorización de \texorpdfstring{$\hat{a}$}{a} y \texorpdfstring{$\hat{b}$}{b} con \texttt{einsum}}
+% ---------------------------------------------------------
+
+Los estimadores centrales de PACO, definidos en \citet{Flasseur_2018} como:
+
+\begin{equation}\label{eq:a_b_estimators}
+    \hat{a}(\theta_k) = \sum_{l=1}^{T} \mathbf{h}_l^\top \hat{C}_l^{-1}\, \mathbf{h}_l, \qquad
+    \hat{b}(\theta_k) = \sum_{l=1}^{T} \mathbf{h}_l^\top \hat{C}_l^{-1}\, (\mathbf{r}_l - \hat{\boldsymbol{\mu}}_l)
+\end{equation}
+
+se implementaban en la versión original mediante una comprensión de listas que ejecuta $T$ productos matriciales individuales con \texttt{np.dot}. La versión extendida convierte los tensores a \texttt{float64} y resuelve ambas sumas con una única llamada \texttt{np.einsum}:
+
+\begin{equation}\label{eq:einsum_a}
+    \hat{a} = \texttt{einsum(`li,lij,lj->',\;}\mathbf{H},\;\hat{C}^{-1},\;\mathbf{H}\texttt{)}
+\end{equation}
+
+\begin{equation}\label{eq:einsum_b}
+    \hat{b} = \texttt{einsum(`li,lij,lj->',\;}\mathbf{H},\;\hat{C}^{-1},\;\mathbf{R}-\mathbf{M}\texttt{)}
+\end{equation}
+
+donde los índices $l$, $i$, $j$ recorren frames, y las dos dimensiones del parche respectivamente. La opción \texttt{optimize=True} permite al compilador elegir el orden de contracción de menor costo. Si los tensores no tienen la forma esperada (e.g., llamada desde \texttt{flux\_estimate}), se mantiene el bucle original como fallback.
+
+% ---------------------------------------------------------
+\subsection{Covarianza Muestral: de Bucle a Producto Matricial}
+% ---------------------------------------------------------
+
+La covarianza muestral $\hat{S}$ que describe la variabilidad temporal de los parches en $\theta_k$ se define como:
+
+\begin{equation}\label{eq:sample_cov}
+    \hat{S}(\theta_k) = \frac{1}{T} \sum_{l=1}^{T} \texttt{np.cov}\!\left(\,[\mathbf{r}_l,\, \hat{\boldsymbol{\mu}}]^\top,\; \texttt{bias=False}\right)
+\end{equation}
+
+La versión original implementa literalmente esta suma con un loop de $T$ llamadas a \texttt{np.cov}. Sin embargo, \texttt{np.cov}$\big([\mathbf{r}_l, \hat{\boldsymbol{\mu}}]^\top\big)$ es algebraicamente equivalente a $\frac{1}{2}(\mathbf{r}_l - \hat{\boldsymbol{\mu}})(\mathbf{r}_l - \hat{\boldsymbol{\mu}})^\top$, lo que transforma la suma completa en el producto de matrices de la Ecuación \ref{eq:sample_cov_vec}:
+
+\begin{equation}\label{eq:sample_cov_vec}
+    \hat{S} = \frac{0{.}5}{T}\;\Delta^\top \Delta, \qquad \Delta = \mathbf{r} - \hat{\boldsymbol{\mu}}\,\mathbf{1}^\top \;\in\, \mathbb{R}^{T \times p}
+\end{equation}
+
+La implementación en la versión extendida reduce $T$ operaciones de covarianza a dos líneas:
+
+\begin{algorithm}[H]
+\caption{Covarianza muestral $\hat{S}$ -- versión extendida (vectorizada)}
+\label{alg:scov_nuevo}
+\Begin{
+    \texttt{// Residuos de todos los frames en una sola operación broadcast} \\
+    \texttt{diff = r - m  \quad (shape: T × p)} \\
+    \quad \\
+    \texttt{// Producto matricial único equivalente a la suma de T covarianzas} \\
+    \texttt{S = 0.5 * (diff.T @ diff) / T}
+}
+\end{algorithm}
+
+La equivalencia matemática entre Ecuaciones \ref{eq:sample_cov} y \ref{eq:sample_cov_vec} garantiza que los resultados numéricos son idénticos (salvo precisión de punto flotante, que mejora al forzar \texttt{float64}).
+
+% ---------------------------------------------------------
+\subsection{FastPACO: Precomputación de Trayectorias y Backend GPU}
+% ---------------------------------------------------------
+
+La modificación más estructural es la refactorización de \texttt{FastPACO.PACOCalc}. La versión original calcula las coordenadas rotadas $\phi_l(\theta_k)$ dentro del loop principal, por lo que la función \texttt{get\_rotated\_pixel\_coords} se invoca $N_{px}$ veces. La versión extendida separa este cálculo en una fase previa, almacenando las trayectorias flotantes e enteras en arrays \texttt{angles\_all\_float} y \texttt{angles\_all\_int}, y construye simultáneamente la máscara de validez \texttt{valid\_mask}:
+
+\begin{algorithm}[H]
+\caption{FastPACO -- precomputación de trayectorias (versión extendida)}
+\label{alg:fastpaco_precomp}
+\Begin{
+    \texttt{// Precomputar PSF plana y trayectorias antes del loop principal} \\
+    \texttt{psf\_flat = normalised\_psf[psf\_mask]} \\
+    \quad \\
+    \texttt{for i in range(Npx):} \\
+    \quad\texttt{ang = get\_rotated\_pixel\_coords(x, y, phi0s[i], angles)} \\
+    \quad\texttt{if max(ang) ≥ W or min(ang) < 0:} \\
+    \quad\quad\texttt{a[i] = b[i] = NaN;  continue} \\
+    \quad\texttt{angles\_all\_float[i] = ang} \\
+    \quad\texttt{angles\_all\_int[i]  = ang.astype(int)} \\
+    \quad\texttt{valid\_mask[i] = True}
+}
+\end{algorithm}
+
+Una vez precomputadas las trayectorias, la fase de inferencia puede ejecutarse en dos caminos: CPU (con \texttt{einsum} vectorizado) o GPU batched mediante CuPy cuando el backend está activo y no se requiere astrometría subpíxel. En el camino GPU, la indexación avanzada de NumPy \texttt{Cinv[ang\_y, ang\_x]} reúne las estadísticas de todos los frames en un único tensor sin bucle Python, y los estimadores $\hat{a}$ y $\hat{b}$ se calculan con \texttt{cp.einsum} sobre el batch completo en la GPU:
+
+\begin{algorithm}[H]
+\caption{FastPACO -- camino GPU batched (versión extendida)}
+\label{alg:fastpaco_gpu}
+\Begin{
+    \texttt{// Para cada batch de píxeles válidos (tamaño B):} \\
+    \texttt{cin   = Ĉ⁻¹[ang\_y, ang\_x]  \quad(B, T, p, p)} \\
+    \texttt{m\_b   = μ̂[ang\_y, ang\_x]   \quad(B, T, p)} \\
+    \texttt{pch   = patches[ang\_y, ang\_x, l] \quad(B, T, p)} \\
+    \quad \\
+    \texttt{// â y b̂ en GPU con una sola llamada einsum por batch} \\
+    \texttt{a[B] = cp.einsum('btij,j,i->b', cin, h, h)} \\
+    \texttt{b[B] = cp.einsum('btij,btj,i->b', cin, pch-m\_b, h)}
+}
+\end{algorithm}
+
+El tamaño del batch $B$ se determina automáticamente con \texttt{\_resolve\_gpu\_batch\_size}, que consulta la memoria libre de la GPU y aplica un factor de seguridad del 35\% para evitar errores de memoria en observaciones de alta resolución.
+
+% ---------------------------------------------------------
+\subsection{Resumen de Cambios}
+% ---------------------------------------------------------
+
+La Tabla \ref{tab:paco_diff} sintetiza las cuatro modificaciones, su mecanismo y su impacto computacional.
+
+\begin{table}[H]
+\centering
+\caption{Cambios algorítmicos entre \texttt{paco\_original.py} y la versión extendida de VIP-master}
+\label{tab:paco_diff}
+\begin{tabular}{|p{2.8cm}|p{3.5cm}|p{3.5cm}|p{2.8cm}|}
+\hline
+\textbf{Componente} & \textbf{Original} & \textbf{Extendida} & \textbf{Impacto} \\
+\hline
+\texttt{get\_patch} & Máscara $H{\times}W$ por invocación + broadcast & Ventana local $w{\times}w$ + caché & Memoria: $\times(H{\cdot}W/w^2)^{-1}$ \\
+\hline
+\texttt{al} / \texttt{bl} & Loop de $T$ \texttt{np.dot} & \texttt{einsum} tensorial en un paso & Sin bucle Python; BLAS nativo \\
+\hline
+\texttt{sample\_covariance} & Loop de $T$ \texttt{np.cov} & $\frac{0.5}{T}\Delta^\top\Delta$ & $T$ ops. $\to$ 1 GEMM \\
+\hline
+\texttt{FastPACO.PACOCalc} & Rotaciones \textit{on-the-fly}; loop por frame & Trayectorias precomputadas; batch GPU con CuPy & Elimina overhead Python; paralelismo GPU \\
+\hline
+\end{tabular}
+\end{table}
+
+Ninguno de estos cambios altera la formulación matemática original de \citet{Flasseur_2018}; son optimizaciones de implementación que mantienen la equivalencia numérica exacta y añaden un camino de aceleración GPU opcional.

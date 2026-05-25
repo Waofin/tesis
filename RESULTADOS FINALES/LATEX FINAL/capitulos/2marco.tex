@@ -1,0 +1,490 @@
+En este capítulo se presentan las bases teóricas fundamentales bajo las cuales se sustenta la investigación.
+
+\section{Fundamentos de Imagen Directa en Astronomía}
+La imagen directa de exoplanetas plantea un problema único en visión por computador: detectar fuentes puntuales con relaciones señal-ruido (SNR) extremadamente bajas (típicamente <5, significando que la señal del exoplaneta es menos de cinco veces mayor que el nivel promedio de las fluctuaciones aleatorias del fondo) en presencia de patrones de ruido altamente estructurados. Desde la perspectiva informática, esto implica:
+
+
+
+\subsection{Formato FITS y Preprocesamiento Inicial}El formato FITS (Flexible Image Transport System) constituye el estándar fundamental en astronomía para el almacenamiento y transmisión de datos científicos. A diferencia de formatos convencionales como JPEG o PNG, FITS preserva metadatos observacionales esenciales (coordenadas celestes, tiempo de exposición, parámetros instrumentales) junto con valores numéricos de alta precisión (float32/float64) sin aplicar compresión con pérdidas. Cada archivo FITS contiene tres componentes (ver Ecuación \ref{eqfits}) principales: un header con metadatos en texto ASCII, una o más extensiones con datos multidimensionales (típicamente cubos 3D [tiempo, x, y]), y opcionalmente tablas binarias. En el pipeline, esta estructura permite manejar eficientemente secuencias de cientos de imágenes de 4K×4K píxeles, donde cada píxel representa el flujo fotónico capturado por el detector. La etapa de preprocesamiento incluye corrección de píxeles defectuosos mediante máscaras predefinidas, sustracción del dark current (ruido térmico del sensor), y normalización por flat field (variaciones en la sensibilidad del detector), operaciones que se implementan mediante álgebra matricial vectorizada en GPU para procesar terabytes de datos.
+\begin{equation}\label{eqfits}
+    X \in \mathbb{R}^{T \times H \times W}
+\end{equation}donde:
+\begin{itemize}
+    \item T: Número de frames (típicamente 100-1000)
+    \item H×W: Resolución espacial (2048×2048 en SPHERE)
+    \item Cada píxel almacena flujo fotónico en float32
+\end{itemize}
+
+
+A continuación se muestra el Algoritmo \ref{alg:fits}, ejemplo de cómo cargar un cubo de datos astronómicos en formato FITS utilizando la biblioteca \texttt{astropy.io}:\\
+
+\begin{algorithm}[H]
+\caption{Lectura de archivo FITS en Python}
+\label{alg:fits}
+\KwData{Archivo FITS con observaciones astronómicas}
+\KwResult{Cubo de datos como arreglo NumPy}
+\SetKwInOut{Input}{input}
+\SetKwInOut{Output}{output}
+
+\Input{observacion.fits}
+\Output{cube con forma (T, H, W)}
+
+\Begin{
+    \texttt{from astropy.io import fits}\;
+    \texttt{hdul = fits.open('observacion.fits')}\;
+    \texttt{cube = hdul[0].data}\;
+    \tcc{cube tiene forma (T, H, W) -> tiempo, alto, ancho}
+}
+\end{algorithm}
+
+Este código abre un archivo FITS y extrae un cubo de imágenes, que típicamente representa una secuencia temporal de observaciones en 2D. La variable \texttt{cube} es un arreglo tridimensional con forma \((T, H, W)\), donde \(T\) es el número de imágenes (o tiempo), y \(H\) y \(W\) son las dimensiones espaciales (alto y ancho).
+
+
+
+\subsection{Alineamiento Subpíxel y Registro de Imágenes}
+El alineamiento subpíxel es un proceso computacional crítico que corrige desplazamientos mínimos entre frames causados por vibraciones mecánicas, turbulencia atmosférica residual, y deriva del telescopio. Esta técnica opera calculando la correlación cruzada normalizada entre imágenes consecutivas en el dominio de Fourier, donde los desplazamientos se manifiestan como fases lineales en la transformada, ver Ecuación \ref{eqsubp}. Mediante interpolación parabólica del pico de correlación, alcanzamos precisión de 0.1-0.01 píxeles, esencial para evitar que los speckles (artefactos ópticos que imitan señales planetarias) se difuminen durante el apilado. Puede ser implementado usando \textit{hase\_cross\_correlation}
+ de scikit-image (ver Algoritmo \ref{alg:alignment}) optimizado con Numba. La precisión subpíxel es particularmente crucial cuando se trabaja con separaciones angulares menores a 0.5 arcosegundos, donde un error de alineación de 0.1 píxeles puede significar perder hasta el 40\% del flujo planetario.
+
+\begin{equation}\label{eqsubp}
+ (\Delta x, \Delta y) = \underset{\delta_x, \delta_y}{\mathrm{argmax}} \left| \mathcal{F}^{-1} \left\{ \mathcal{F}\{I_1\} \cdot \mathcal{F}^*\{I_2\} \right\} \right|
+\end{equation} 
+
+\begin{algorithm}[H]
+\caption{Alineamiento Subpíxel}
+\label{alg:alignment}
+\KwData{Cubo de imágenes astronómicas}
+\KwResult{Lista de desplazamientos entre frames}
+
+\Begin{
+    \texttt{from skimage.registration import phase\_cross\_correlation}\;
+    \texttt{shifts = [phase\_cross\_correlation(ref, img) for img in cube]}\;
+}
+\end{algorithm}
+El Algoritmo implementa la función crítica de alineamiento subpíxel mediante correlación cruzada en el dominio de la frecuencia, utilizando la biblioteca \texttt{scikit-image} optimizada con técnicas de interpolación parabólica. La función \texttt{phase\_cross\_correlation} calcula el desplazamiento óptimo entre una imagen de referencia y cada frame del cubo de datos, aprovechando las propiedades de la transformada de Fourier para detectar traslaciones con precisión subpíxel del orden de 0.01-0.1 píxeles.
+
+La importancia del alineamiento subpíxel radica en que, sin esta corrección, los patrones de speckle se difuminan durante el procesamiento estadístico, resultando en una pérdida significativa de la señal planetaria. En particular, para separaciones angulares menores a 0.5 arcosegundos, un error de alineación de apenas 0.1 píxeles puede ocasionar una pérdida del 40\% del flujo fotónico del exoplaneta objetivo, comprometiendo gravemente la sensibilidad del método de detección.
+
+
+\section{Algoritmos Clave}
+Sección que presenta teóricamente los algoritmos a utilizar en el proyecto y que darán la base del pipeline a implementar.
+\subsection{Principal Component Analysis plus Covariance -- PACO}El núcleo de nuestro pipeline de reducción de ruido es PACO (Principal Component Analysis plus Covariance), un algoritmo híbrido que combina descomposición matricial con modelado estadístico espacial. En su primera fase, se aplicará PCA (Análisis de Componentes Principales) mediante descomposición en valores singulares (SVD) al cubo de imágenes alineadas, ver Ecuación \ref{eqpca1}, identificando los k patrones dominantes de speckles. Matemáticamente, esto corresponde a factorizar la matriz de datos X (de tamaño n\_frames × n\_píxeles) como X = U\(\Sigma\)\(V^T\), donde las columnas de V contienen los componentes principales (patrones de speckle) y \(\Sigma\) su importancia relativa. La selección del número óptimo de componentes (k) sigue el criterio de Marchenko-Pastur -describe la distribución asintótica de los valores propios (o valores singulares) de matrices aleatorias grandes- evitando tanto sobresustracción (que borraría planetas) como subsustracción (dejando ruido residual). La segunda fase modelaría variaciones locales mediante matrices de covarianza, ver Ecuación \ref{eqpca2}, calculadas en ventanas deslizantes de 9×9 píxeles, capturando así la no estacionariedad del ruido. Se planea implementar este doble proceso en CUDA (Compute Unified Device Architecture) y usando cuBLAS (CUDA Basic Linear Algebra Subprograms), librería de bajo nivel escrita en C/C++ desarrollada por NVIDIA, para la SVD y kernels personalizados para la covarianza, logrando aceleración respecto a versiones CPU. Su implementación se puede ver en el Algoritmo \ref{alg:cuda_cov}. \\\\
+PCA: Identifica patrones globales de ruido mediante SVD
+\begin{equation}\label{eqpca1}
+X = U \Sigma V^T \quad \Rightarrow \quad X_{\text{recon}} = \sum_{i=1}^k \sigma_i \mathbf{u}_i \mathbf{v}_i^T
+\end{equation}
+Covarianza local: Modela variaciones espaciales en ventanas 9×9 píxeles
+
+\begin{equation}\label{eqpca2}
+\mathbf{C}_{pq} = \frac{1}{N-1} \sum_{i \in \mathcal{N}} (x_i - \bar{x})(x_i - \bar{x})^T
+\end{equation}
+
+\begin{algorithm}[H]
+\caption{Kernel CUDA para Covarianza Local}
+\label{alg:cuda_cov}
+\KwData{Matrices de entrada y salida en GPU}
+\KwResult{Cálculo de covarianza local optimizado}
+
+\Begin{
+    \tcc{Configuración del kernel CUDA}
+    \texttt{\_\_global\_\_ void cov\_kernel(float* input, float* output) \{}\;
+    \Indp
+        \texttt{\_\_shared\_\_ float tile[32][32]}\;
+        \texttt{int idx = blockIdx.x * blockDim.x + threadIdx.x}\;
+        \texttt{int idy = blockIdx.y * blockDim.y + threadIdx.y}\;
+        \BlankLine
+        \tcc{Cargar datos en memoria compartida}
+        \texttt{if (idx < width \&\& idy < height) \{}\;
+        \Indp
+            \texttt{tile[threadIdx.y][threadIdx.x] = input[idy * width + idx]}\;
+        \Indm
+        \texttt{\}}\;
+        \texttt{\_\_syncthreads()}\;
+        \BlankLine
+        \tcc{Calcular covarianza local en ventana 9x9}
+        \texttt{float covar = 0.0f}\;
+        \texttt{for (int i = -4; i <= 4; i++) \{}\;
+        \Indp
+            \texttt{for (int j = -4; j <= 4; j++) \{}\;
+            \Indp
+                \texttt{covar += computeCovariance(tile, i, j)}\;
+            \Indm
+            \texttt{\}}\;
+        \Indm
+        \texttt{\}}\;
+        \BlankLine
+        \tcc{Escribir resultado optimizado}
+        \texttt{if (idx < width \&\& idy < height) \{}\;
+        \Indp
+            \texttt{output[idy * width + idx] = covar}\;
+        \Indm
+        \texttt{\}}\;
+    \Indm
+    \texttt{\}}\;
+}
+\end{algorithm}
+
+El Algoritmo \ref{alg:cuda_cov} implementa el cálculo de covarianza local optimizado en GPU basado en \cite{inproceedings}, \cite{hangün2019performancecomparisonopencvbuilt}, \cite{cuda_large_scale_gpu_mlplus2025} y  \cite{nvidia_cuda_best_practices_2025} siendo ideal para operaciones de matrices de covarianza y procesamiento de imágenes. Dado que la técnica de sliding window es recomendada para matrices de covarianza \cite{iwakura2008sliding}. El kernel utiliza memoria compartida  \cite{young2008image_cuda}(\texttt{\_\_shared\_\_}) para poder dividir la matriz en submatrices más pequeñas y hacer el proceso más eficiente minimizando accesos a la memoria global \cite{dhanush2024masteringcuda}, organizando los datos en bloques de 32×32 \cite{nvidia_cuda_best_practices_2025} threads ya que los SMs (streaming multiprocessors) tienen recursos limitados, 16384 registros de 32 bits que guardan datos temporales de los hilos \citep{adaptableCuda_slidingwindow_neu_rcl} y para maximizar el rendimiento varios bloques de hilos pueden ejecutarse simultáneamente en un mismo SM. Al ejecutarse un bloque de hilos, CUDA los divide en grupos de 32 hilos llamados warps, por lo tanto, para que los warps estén siempre completamente llenos y se maximice la eficiencia, además, escoger bloques de 32x32 es óptimo ya que permite disminuir la complejidad computacional usando parches de subventanas aplicables a PCA y como el máximo número de hilos por bloque es 1024 (32x32) según \cite{nvidia_cuda_best_practices_2025}, se escogió ese valor de bloques para que calce directamente con los parches de covarianza y subparches a nivel teórico en base a \citep{Kwatra2010Fast}, que procesan ventanas deslizantes de 9×9 píxeles el cual es un valor arbitrario. \\Cada thread calcula la covarianza para su píxel correspondiente, aprovechando la paralelización masiva de la GPU para procesar miles de ventanas simultáneamente.\\Dado que el cálculo de covarianza usando tiles son operaciones que implican escritura y lectura, y que además dependen de los resultados anteriores, siguiendo los principios de Bernstein donde ` ``Dos conjuntos de operaciones pueden ejecutarse en paralelo si y solo si no hay dependencias de flujo, anti-dependencias o dependencias de salida entre ellas'' \cite{4038883}, esto transformaría todo en una operación de tipo stencil donde el stencil sería en este caso el cálculo de covarianza local mediante ventanas y además se cumple la condición de carrera, que ocurre cuando múltiples hilos/procesos acceden simultáneamente a un recurso compartido, en este caso memoria,  sin sincronización, y el resultado final depende del orden impredecible de ejecución. Para poder asegurar la consistencia de los datos y sincronizar los arrays compartidos evitando errores \cite{Markidis2023CUDAStencils}, usamos  \texttt{\_\_syncthreads()} lo que asegura que todos los threads del bloque hayan cargado sus datos antes de proceder con el cálculo \cite{TutorialsPointCUDAThreads}. Cabe recalcar que el algoritmo 3 es una implementación genérica propuesta o una técnica estándar de procesamiento de imágenes en GPU en base a la documentación leída, aplica solo al cálculo de covarianza local que es solamente una parte del algoritmo PACO y no ha sido implementada en el algoritmo completo. En este caso PACO abarca PCA (con cuBLAS) además de  los parches de covarianza y también el algoritmo \ref{alg:paco1}.
+
+Los algoritmos relacionados directamente a PACO descritos en \cite{Flasseur_2018} donde se propusieron son los siguientes:
+\newpage
+\begin{algorithm}
+\caption{PACO detection – Cálculo del mapa S/N para posiciones angulares}
+\label{alg:paco1}
+\Begin{
+    \texttt{for $\phi_0$ in $\mathcal{G}$:} \\
+    \quad \texttt{a ← 0} \\
+    \quad \texttt{b ← 0} \\
+    \quad \texttt{for $\ell = 1$ to $T$:} \\
+    \quad\quad \texttt{// Step 1: extraer parches relevantes} \\
+    \quad\quad \texttt{$\phi_{\ell} = \mathcal{F}_{\ell}(\phi_0)$} \\
+    \quad\quad \texttt{$\mathcal{P}_{\ell} \leftarrow \{r[\phi_{\ell'},\ell']\}_{\ell'=1..T}$} \\
+    \quad\quad \texttt{// Step 2: aprender estadísticas del fondo} \\
+    \quad\quad \texttt{$\hat{m}_{[\phi_{\ell}]},\,\hat{C}_{[\phi_{\ell}]} \leftarrow$ estimar de $\mathcal{P}_{\ell}$} \\
+    \quad\quad \texttt{// Step 3: actualizar acumuladores} \\
+    \quad\quad \texttt{$w \leftarrow \hat{C}_{[\phi_{\ell}]}^{-1} \cdot h_{[\phi_{\ell}]}$} \\
+    \quad\quad \texttt{$a \leftarrow a + w^{\top} \cdot h_{[\phi_{\ell}]}$} \\
+    \quad\quad \texttt{$b \leftarrow b + w^{\top} \cdot (\,r[\phi_{\ell},\ell] - \hat{m}_{[\phi_{\ell}]}\,)$} \\
+    \quad \texttt{end for} \\
+    \quad \texttt{S/N($\phi_0$) $\leftarrow$ b / $\sqrt{a}$} \\
+}
+\end{algorithm}
+Donde el algoritmo \ref{alg:paco1} calcula la relación señal-ruido (S/N) para cada posición angular $\phi_0$ en el grid $\mathcal{G}$. Para cada $\phi_0$, itera sobre los $T$ frames acumulando dos términos clave: $a$ (normalización de la varianza) y $b$ (señal residual). Primero extrae parches $\mathcal{P}_\ell$ centrados en posiciones transformadas $\phi_\ell = \mathcal{F}_\ell(\phi_0)$, luego estima estadísticas locales del fondo ($\hat{m}_{[\phi_\ell]}$, $\hat{C}_{[\phi_\ell]}$) y finalmente actualiza los acumuladores usando pesos óptimos $w = \hat{C}^{-1}h$. El S/N se obtiene como $b/\sqrt{a}$, maximizando la detección de fuentes débiles en entornos ruidosos.
+\newpage
+
+
+\begin{algorithm}
+\caption{Fast PACO detection – Versión acelerada del S/N}
+\label{alg:paco2}
+\Begin{
+    \texttt{for $\phi_0$ in $\mathcal{G}$:} \\
+    \quad \texttt{a ← 0} \\
+    \quad \texttt{b ← 0} \\
+    \quad \texttt{for $\ell = 1$ to $T$:} \\
+    \quad\quad \texttt{$\phi_{\ell} = \mathcal{F}_{\ell}(\phi_0)$} \\
+    \quad\quad \texttt{// Usar estadísticas precomputadas o simplificadas} \\
+    \quad\quad \texttt{$\tilde{m}_{[\phi_{\ell}]},\,\tilde{C}_{[\phi_{\ell}]} \leftarrow$ estimación acelerada} \\
+    \quad\quad \texttt{$w \leftarrow \tilde{C}_{[\phi_{\ell}]}^{-1} \cdot h_{[\phi_{\ell}]}$} \\
+    \quad\quad \texttt{$a \leftarrow a + w^{\top} \cdot h_{[\phi_{\ell}]}$} \\
+    \quad\quad \texttt{$b \leftarrow b + w^{\top} \cdot (\,r[\phi_{\ell},\ell] - \tilde{m}_{[\phi_{\ell}]}\,)$} \\
+    \quad \texttt{end for} \\
+    \quad \texttt{S/N($\phi_0$) $\leftarrow$ b / $\sqrt{a}$ (aproximado)} \\
+}
+\end{algorithm}
+El algoritmo \ref{alg:paco2} optimiza el cálculo del S/N mediante aproximaciones computacionales. Sustituye las estimaciones locales exactas de media y covarianza ($\hat{m}$, $\hat{C}$) por versiones precomputadas o simplificadas ($\tilde{m}$, $\tilde{C}$). Mantiene la estructura del Algoritmo 1 pero reduce drásticamente el costo computacional, ideal para procesar grandes volúmenes de datos astronómicos. La relación S/N aproximada ($b/\sqrt{a}$) preserva suficiente precisión para detecciones iniciales.
+\newpage
+\begin{algorithm}
+\caption{PACO estimation – Estimación no sesgada del flujo $\widehat\alpha$}
+\label{alg:paco3}
+\Begin{
+    \texttt{Input: posición $\phi_0$, datos $r[\theta_k,\ell]$, $\widehat\alpha=0$ por defecto, precisión $\epsilon$} \\
+    \texttt{$\widehat\alpha_{\text{old}} \leftarrow +\infty$} \\
+    \texttt{while $|\widehat\alpha - \widehat\alpha_{\text{old}}| > \epsilon\,\widehat\alpha$:} \\
+    \quad \texttt{$\widehat\alpha_{\text{old}} \leftarrow \widehat\alpha$} \\
+    \quad \texttt{a ← 0; b ← 0} \\
+    \quad \texttt{for $\ell = 1$ to $T$:} \\
+    \quad\quad \texttt{// Paso 1: construir colección de parches descontaminados} \\
+    \quad\quad \texttt{$\phi_{\ell} = \mathcal{F}_{\ell}(\phi_0)$} \\
+    \quad\quad \texttt{$\mathcal{P} \leftarrow \{r[\phi_{\ell'},\ell'] - \widehat\alpha\cdot h[\phi_{\ell'}]\}_{\ell'=1..T}$} \\
+    \quad\quad \texttt{// Paso 2: aprender estadísticas con la señal descontaminada} \\
+    \quad\quad \texttt{$\hat m(\alpha),\,\hat C(\alpha) \leftarrow$ Eq. (13)} \\
+    \quad\quad \texttt{// Paso 3: actualizar términos de estimación} \\
+    \quad\quad \texttt{$w \leftarrow \hat C^{-1}(\alpha)\cdot h$} \\
+    \quad\quad \texttt{$a \leftarrow a + w^{\top} h$} \\
+    \quad\quad \texttt{$b \leftarrow b + w^{\top}(r - \hat m(\alpha))$} \\
+    \quad \texttt{end for} \\
+    \quad \texttt{$\widehat\alpha \leftarrow \max(b,0) / a$ \quad (Eq. (14))} \\
+    \texttt{end while} \\
+    \texttt{Output: $\widehat\alpha$ estimado no sesgado} \\
+}
+\end{algorithm}
+El Algoritmo \ref{alg:paco3} estima iterativamente el flujo $\widehat{\alpha}$ de una fuente detectada, corrigiendo el sesgo inducido por la contaminación del fondo. En cada iteración: (1) descuenta la señal estimada ($\widehat{\alpha}h$) de los parches, (2) recalcula las estadísticas del fondo ($\hat{m}(\alpha)$, $\hat{C}(\alpha)$) y (3) actualiza $\widehat{\alpha}$ mediante $\max(b,0)/a$ (Ec. 14). El proceso itera hasta convergencia (precisión $\epsilon$), garantizando estimaciones no sesgadas incluso con ruido no estacionario.
+
+
+\subsection{Regime Switching Model}
+
+El Regime Switching Model (RSM) constituye nuestra solución al problema de clasificación píxel a píxel en condiciones de incertidumbre extrema (SNR < 3). Este modelo probabilístico jerárquico considera que cada píxel puede estar en dos regímenes: ruido o planeta, con probabilidades $\pi$ y 1-$\pi$ respectivamente \cite{Dahlqvist_2020}.\\
+RSM ha demostrado un rendimiento superior en el espacio de la característica operativa del receptor (ROC) en comparación con los mapas de relación señal-ruido estándar generados por algoritmos de post-procesamiento ADI de última generación \cite{Dahlqvist_2020}. Asimismo, se ha confirmado su rendimiento superior en separaciones angulares pequeñas en comparación con los mapas de S/N estándar \cite{Dahlqvist_2021}\\
+
+ La inferencia clásica mediante MCMC resulta prohibitiva para imágenes completas (complejidad O(n³)), por lo que se empleará Inferencia Variacional (VI), que aproxima la posterior mediante distribuciones gaussianas factorizadas optimizadas con gradiente descendente. Se planea utilizar este esquema en PyTorch/Pyro --librerías de python-- donde se define un guide AutoDiagonalNormal que parametriza las distribuciones aproximadas, y optimizamos los parámetros variacionales mediante Adam \cite{kingma2017adammethodstochasticoptimization} sobre el ELBO (Evidence Lower Bound). Esta aproximación reduce la complejidad a O(n) mediante las Ecuaciones \ref{eqrsm1} y \ref{eqrsm2}, permitiendo procesar imágenes completas en minutos en lugar de días. Un aspecto clave es la inicialización inteligente de los parámetros basada en estadísticas locales de los residuos de PACO, lo que acelera la convergencia del algoritmo.\\\\
+Modelo jerárquico:
+\begin{equation}\label{eqrsm1}
+ \begin{aligned}
+x_i &\sim \pi \mathcal{N}(\mu_p, \sigma_p) + (1-\pi) \mathcal{N}(0, \sigma_n) \\
+\pi &\sim \text{Beta}(1, 1000) \\
+\mu_p &\sim \mathcal{N}^+(0, 10)
+\end{aligned}
+\end{equation}
+VI: Aproxima posterior con distribución gaussiana factorizada
+donde:
+\begin{equation}\label{eqrsm2}
+q(\theta) = \prod_i \mathcal{N}(\mu_i, \sigma_i)
+\end{equation}
+La ventaja computacional es que reemplaza MCMC (O(n³)) por optimización estocástica (O(n)), acelerando el cálculo en GPU con PyTorch.\\
+A continuación, se presenta un pseudocódigo conceptual del Algoritmo \ref{alg:rsm_pyro} que ilustra cómo se podría implementar el modelo RSM utilizando Pyro en Python.\\
+\begin{algorithm}[H]
+\caption{Pseudocódigo Conceptual: Implementación RSM con Pyro}
+\label{alg:rsm_pyro}
+\SetKwInOut{Input}{Entrada}
+\SetKwInOut{Output}{Salida}
+\Input{Cubo de imágenes residuales post-PACO, parámetros del modelo}
+\Output{Clasificación probabilística píxel a píxel y mapas de incertidumbre}
+
+
+\textbf{Configuración del modelo bayesiano} \\
+
+\texttt{pyro.clear\_param\_store()}\; 
+\texttt{model = RSMModel(n\_pixels=data.shape[-1], prior\_planet\_prob=1e-4)}\; 
+
+\textbf{Distribución guía con inicialización inteligente} \\
+\Indp
+\texttt{guide = AutoDiagonalNormal(model, init\_loc\_fn=init\_to\_mean)}\; 
+\texttt{adam\_params = \{"lr": 0.01, "betas": (0.9, 0.999), ``eps'': 1e-8\}}\; 
+\texttt{scheduler = pyro.optim.ExponentialLR(\{"optimizer": torch.optim.Adam, **adam\_params\})}\; 
+
+\textbf{Configuración SVI con early stopping} \\
+
+\texttt{svi = SVI(model, guide, scheduler, loss=Trace\_ELBO())}\; 
+\texttt{losses = []}\; 
+\For{\texttt{epoch in range(max\_epochs)}}{
+    \texttt{loss = svi.step(data)}\; 
+    \texttt{losses.append(loss)}\; 
+    \If{\texttt{epoch \% 100 == 0}}{
+        \texttt{print(f"Epoch \{epoch\}: Loss = \{loss:.4f\}")}\; 
+    }
+    \textbf{Criterio de convergencia} \\
+    \If{\texttt{len(losses) > 50 and np.std(losses[-50:]) < convergence\_tol}}{
+        \texttt{break}\; 
+    }
+}
+
+\textbf{Inferencia posterior y generación de mapas} \\
+
+\texttt{posterior\_samples = guide.sample(n\_samples=1000)}\; 
+\texttt{planet\_prob\_map = posterior\_samples['planet\_indicator'].mean(dim=0)}\; 
+
+\end{algorithm}
+
+\subsubsection{Explicación del pseudocodigo}
+
+El pseudocódigo del Algoritmo~\ref{alg:rsm_pyro} ilustra la implementación esquematica del modelo RSM utilizando inferencia variacional \cite{Blei_2017}, reemplazando métodos MCMC tradicionales por una aproximación eficiente. Cabe considerar que esto no ha sido probado ni está completo aún, ha sido creado a modo de referencia de la implementación final en base a la revisión de la literatura. La implementación se estructurará en cuatro etapas clave:
+
+\subsubsection{Configuración conceptual}
+\begin{itemize}
+    \item \texttt{pyro.clear\_param\_store()}: Reinicia el almacén de parámetros para evitar contaminación entre ejecuciones.
+    \item \texttt{RSMModel(n\_pixels=data.shape[-1], prior\_planet\_prob=1e-4)}: 
+    \begin{itemize}
+        \item \texttt{n\_pixels}: Dimensión espacial de los datos (e.g., $256 \times 256$ para imágenes típicas)
+        \item \texttt{prior\_planet\_prob}: Probabilidad a priori $\mathbb{P}(H_1) = 10^{-4}$, donde:
+        \begin{equation}
+            H_1: \text{El píxel contiene señal planetaria}
+        \end{equation}
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Optimización Automatizada}
+\begin{itemize}
+    \item \texttt{AutoDiagonalNormal(model, init\_loc\_fn=init\_to\_mean)}: 
+    \begin{itemize}
+        \item Aproxima la posterior con distribución normal diagonal
+        \item \texttt{init\_to\_mean}: Inicialización inteligente basada en momentos
+    \end{itemize}
+    \item Configuración de Adam con parámetros:
+    \begin{equation}
+        \eta = 0.01,\quad \beta_1 = 0.9,\quad \beta_2 = 0.999,\quad \epsilon = 10^{-8}
+    \end{equation}
+    \item \texttt{ExponentialLR}: Adapta dinámicamente la tasa de aprendizaje $\eta_t = \eta_0 \gamma^t$
+\end{itemize}
+
+\subsubsection{Entrenamiento con SVI}
+El proceso de entrenamiento minimiza la cota inferior de evidencia (ELBO) basado en \cite{JMLR:v14:hoffman13a}:
+\begin{equation}
+    \mathcal{L}(\phi) = \mathbb{E}_{q_\phi}[\log p(x,z) - \log q_\phi(z)]
+\end{equation}
+
+\begin{itemize}
+    \item Implementa early stopping cuando:
+    \begin{equation}
+        \sigma(\{\mathcal{L}_{t-50}, \dots, \mathcal{L}_t\}) < \tau \quad (\tau = \text{tolerancia})
+    \end{equation}
+    \item Monitorea convergencia cada 100 épocas
+\end{itemize}
+
+\subsubsection{Generación de Mapas}
+\begin{itemize}
+    \item Muestreo posterior:
+    \begin{equation}
+        \{\theta^{(s)}\}_{s=1}^{1000} \sim q_\phi(\theta|\mathbf{x})
+    \end{equation}
+    \item Mapa de probabilidades:
+    \begin{equation}
+        \hat{p}_{ij} = \frac{1}{1000}\sum_{s=1}^{1000} \mathbb{I}(\theta^{(s)}_{ij} > 0)
+    \end{equation}
+    donde $(i,j)$ indexan posiciones pixelares.
+\end{itemize}
+
+Esta implementación optimizará el balance precisión-computación mediante:
+\begin{itemize}
+    \item Paralelización automática vía PyTorch
+    \item Aproximación variacional en lugar de MCMC costoso
+    \item Criterios de convergencia adaptativos
+\end{itemize}
+
+\section{Aceleración GPU y Optimizaciones de Memoria}
+La implementación eficiente en GPU requiere un entendimiento de la jerarquía de memoria y patrones de acceso optimizados para maximizar el throughput computacional. En la arquitectura CUDA, la memoria se organiza en múltiples niveles con diferentes características de latencia y ancho de banda: memoria global (alta latencia, $\approx$ 400 $\approx$ 600 ciclos), memoria compartida (baja latencia, ~1-2 ciclos), registros (latencia mínima), y memoria constante (solo lectura, cacheable).
+
+Para la implementación de PACO, las optimizaciones se centrarán en minimizar los accesos a memoria global mediante el uso estratégico de memoria compartida. Los kernels CUDA para covarianza local cargan bloques de 32×32 píxeles (1024 elementos) en memoria compartida por streaming multiprocessor, permitiendo que los 32 threads del warp accedan a datos locales con latencia de menores ciclos de memoria global. Esta optimización reduciría el tiempo de acceso a memoria.
+
+La precisión mixta (FP16/FP32) reduce los requerimientos de memoria global en 50\% para operaciones no críticas, mientras mantiene FP32 para acumulaciones sensibles numéricamente como las sumas de covarianza. El kernel fusion combina operaciones consecutivas (carga de datos + normalización + cálculo PCA) en un solo lanzamiento, reduciendo la sobrecarga de sincronización por bloque de operaciones.
+
+Para RSM-VI, se aprovecharán los tensor cores de las GPUs Ampere/Hopper mediante el formato tf32 (tensor float-32), que proporciona el rango dinámico de FP32 con el throughput de FP16, logrando hasta 156 TFLOPS en operaciones matriciales complejas comparado con 19.5 TFLOPS de FP32 convencional. La implementación optimizada permite procesar imágenes de 4096×4096 píxeles, reduciendo el tiempo total de análisis de surveys completos.
+\subsection{Paralelización CPU/GPU}
+La aceleración mediante arquitecturas heterogéneas se fundamenta en principios como la Ley de Amdahl \cite{10.1145/1465482.1465560}, que proporciona la base teórica para el speedup máximo alcanzable, demostrando que incluso con paralelización perfecta, la porción secuencial del código limita la ganancia potencial. Este principio fundamental se expresa matemáticamente como:
+
+\begin{equation}
+S_{\text{max}} = \frac{1}{(1 - p) + \frac{p}{n}}
+\end{equation}
+
+donde p representa la fracción paralelizable del código y n el número de unidades de procesamiento. En la práctica, este modelo se complementa con la Ley de Gustafson \cite{gustafson1988}, que introduce el concepto de escalabilidad débil, permitiendo que problemas más grandes puedan lograr mejor escalamiento paralelo. El modelo de ejecución SIMT (Single Instruction Multiple Thread), característico de las GPUs modernas, implementa una variante del paradigma SIMD donde warps de 32 threads ejecutan instrucciones en lock-step \cite{nvidia2023cuda}, con mecanismos para manejar divergencia de control mediante predicación de instrucciones.
+
+Arquitectónicamente, se observa un claro trade-off entre CPUs, optimizadas para baja latencia mediante estructuras complejas como predicción de saltos avanzada, ejecución fuera de orden y pipelines profundos, y GPUs, diseñadas específicamente para alto throughput mediante arrays masivos de núcleos simples (CUDA cores) y jerarquías de memoria especializadas. Las GPUs NVIDIA Ampere representan el estado del arte actual \cite{nvidia2020ampere}, implementando:
+\begin{enumerate}
+    \item 108 Streaming Multiprocessors organizados en grupos de procesamiento
+
+    \item Subsistema de memoria HBM2e con ancho de banda de 1.5TB/s y baja latencia
+    
+    \item Cache L2 unificada de 40MB con políticas de reemplazo optimizadas
+    
+    \item Mecanismos avanzados de prefetching y coalescing de accesos a memoria
+\end{enumerate}
+
+\subsection{TensorCores}
+Los Tensor Cores representan una evolución de arquitectura en la computación acelerada, implementando operaciones de álgebra lineal en hardware con eficiencia. Su funcionamiento se basa en la operación fundamental de multiplicación-acumulación matricial de la ecuacion \ref{tensorcores}:
+
+\begin{equation}
+\label{tensorcores}
+D_{m,n} = \sum_{k=1}^{K} A_{m,k} \times B_{k,n} + C_{m,n}
+\end{equation}
+
+con soporte para precisiones mixtas (FP16 para los operandos A y B, acumulando en FP32 para C y D). Esta implementación permite alcanzar throughputs teóricos que superan en órdenes de magnitud a las unidades FP32 tradicionales \cite{markidis2018}. La arquitectura Ampere introduce varias mejoras clave:
+
+-Throughput teórico de 312 TFLOPS (FP16) mediante ejecución pipelineada
+
+-Soporte para sparsity 2:4 
+
+-Operaciones MMA (Matrix Multiply-Accumulate) completadas en solo 4 ciclos de reloj
+
+Unidades dedicadas para transformaciones de formato on-the-fly
+
+\subsection{Tecnología Ampere}
+La microarquitectura Ampere introduce innovaciones en la gestión de memoria y conectividad, manejando los cuellos de botella tradicionales en aplicaciones de computación intensiva \cite{nvidia2020ampere}. El modelo teórico de ancho de banda efectivo incorpora múltiples factores como se ve en la ecuacion \ref{ampere}:
+
+\begin{equation}
+\label{ampere}
+\text{Bandwidth}{\text{effective}} = (\text{Bandwidth}{\text{peak}} \times \text{CacheHitRate}) + (\text{CompressionRatio} \times \text{Bandwidth}_{\text{physical}})
+\end{equation}
+\\
+Las implementaciones concretas incluyen:\\
+\begin{enumerate}
+    \item Subsistema de memoria unificada con acceso CPU-GPU a 100GB/s mediante DMA optimizado
+      \item Interconexión NVLink 3.0 con 600GB/s de bandwidth y protocolos mejorados
+       \item Tecnología MIG (Multi-Instance GPU) que permite particionamiento físico de recursos
+       \item Compresión de datos en tiempo real con ratios de hasta 4:1 para ciertos patrones de acceso
+\end{enumerate}
+
+
+
+
+\subsection{CUDA}
+CUDA (Compute Unified Device Architecture) \cite{nvidia2023cuda} es un modelo de programación paralela desarrollado por NVIDIA que permite ejecutar código general en GPUs mediante kernels. Estos kernels se ejecutan en una jerarquía de hilos organizados en bloques de 32 hilos \cite{articulo} y grids, donde cada hilo procesa datos de forma concurrente. El modelo se basa en:
+
+\subsubsection{Modelo de Memoria}
+La jerarquía de memoria sigue en la ecuacion \ref{memoria}:
+
+\begin{equation}
+\label{memoria}
+    t_{\text{access}} = 
+    \begin{cases}
+        1-3\ \text{cycles} & \text{Registros} \\
+        20-30\ \text{cycles} & \text{Shared Memory} \\
+        200+\ \text{cycles} & \text{Global Memory}
+    \end{cases}
+\end{equation}
+
+El ancho de banda efectivo se calcula en la ecuacion \ref{coal}:
+
+\begin{equation}
+\label{coal}
+    \text{BW}_{\text{eff}} = \text{BW}_{\text{peak}} \times \text{Coalescing\%} \times (1 - \text{Bank Conflicts})
+\end{equation}
+
+\subsubsection{Ejecución de Kernels}
+La configuración de lanzamiento se especifica por \cite{sanders2010} en la ecuación \ref{kernel}:
+
+\begin{equation}
+\label{kernel}
+    \texttt{kernel<<<gridDim, blockDim, sharedMemSize, stream>>>}
+\end{equation}
+
+donde:
+\begin{itemize}
+    \item \texttt{gridDim}: Dimensión de la malla de bloques
+    \item \texttt{blockDim}: Hilos por bloque (máx. 1024)
+\end{itemize}
+
+El mapeo de hilos a datos sigue en la ecuación \ref{global}:
+
+\begin{equation}
+\label{global}
+    \text{GlobalId} = \text{blockIdx} \times \text{blockDim} + \text{threadIdx}
+\end{equation}
+
+\subsubsection{Optimización}
+La eficiencia se mide mediante la ecuación \ref{flops}:
+
+\begin{equation}
+\label{flops}
+    \eta = \frac{\text{FLOPs}_{\text{achieved}}}{\text{FLOPs}_{\text{theoretical}}}
+\end{equation}
+
+Factores críticos:
+\begin{itemize}
+    \item Coalescing de accesos a memoria global
+    \item Minimización de divergencia de warps
+    \item Uso de memoria compartida como caché programable
+\end{itemize}
+\section{Validación del Modelo}
+En esta sección se presentan las métricas con las cuales se evaluará el pipeline y se verificará si el resultado de la investigación fue positivo o negativo.
+\subsection{Métricas de Desempeño}
+Las métricas estándar de detección para el pipeline híbrido RSM-PACO se definen mediante la Ecuación \ref{eq:fdr_mdr}:
+
+\begin{equation}\label{eq:fdr_mdr}
+\text{FDR}  = \frac{\text{FP}}{\text{TP} + \text{FP}}, \quad 
+\text{MDR} = \frac{\text{FN}}{\text{TP} + \text{FN}}
+\end{equation}
+
+donde FDR (False Discovery Rate) representa la tasa de falsos positivos y MDR (Missed Detection Rate) indica la tasa de detecciones perdidas. Para evaluar el desempeño del pipeline híbrido RSM-PACO, se prioriza minimizar el MDR acercando el valor lo más posible a cero, ya que se busca maximizar la capacidad de detectar planetas reales sin perder señales genuinas por clasificaciones incorrectas como ruido residual.
+
+
+\begin{table}[H]
+\centering
+\caption{Relaciones entre métricas de evaluación para detección de exoplanetas}
+\label{tab:metricas_avanzadas}
+\begin{tabular}{llll}
+\toprule
+\textbf{Métrica} & \textbf{Fórmula} & \textbf{Relación con FDR/MDR} & \textbf{Interpretación} \\
+\midrule
+Precisión & $\frac{\text{TP}}{\text{TP} + \text{FP}}$ & $\text{Precisión} = 1 - \text{FDR}$ & Exactitud de las detecciones \\[0.2cm]
+FDR & $\frac{\text{FP}}{\text{TP} + \text{FP}}$ & $\text{FDR} = 1 - \text{Precisión}$ & Contaminación por falsos positivos \\[0.2cm]
+Recall & $\frac{\text{TP}}{\text{TP} + \text{FN}}$ & $\text{Recall} = 1 - \text{MDR}$ & Capacidad de detectar planetas reales \\[0.2cm]
+MDR & $\frac{\text{FN}}{\text{TP} + \text{FN}}$ & $\text{MDR} = 1 - \text{Recall}$ & Planetas reales no detectados \\[0.2cm]
+F1-Score & $\frac{2 \cdot \text{Prec} \cdot \text{Rec}}{\text{Prec} + \text{Rec}}$ & Combina FDR y MDR & Balance entre precisión y cobertura \\
+\bottomrule
+\end{tabular}
+\end{table}
+donde:\\
+TP = True positive\\
+FP = False positive\\
+
+
+
+

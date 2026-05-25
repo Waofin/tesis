@@ -1,0 +1,545 @@
+%Apoyo
+%%7. Desarrollo del Trabajo ( aqui se pueden extender)
+%Introduccion al capitulo, va entre el titulo del capitulo y la primera seccion.
+%7.1. Diseño de arquitectura
+%7.1.1. Configuración Inicial del Entorno
+%7.1.2. Arquitectura Implementación Final
+%7.2. Estructura del código
+%7.2.1. Backend
+%7.2.2. Frontend
+%7.3. Desarrollo del Software
+%7.3.1. Problemas Durante el Desarrollo
+%7.3.2. Pruebas, Optimización y Métricas Finales
+%7.5. Conclusión del Capítulo
+
+
+
+
+
+En el presente capítulo se explica el desafío abordado y la solución propuesta en este trabajo. Luego, se describen los algoritmos utilizados como base.Por último, se detalla el desarrollo del pipeline propuesto.
+
+%\section{Planificación de la experimentación}
+
+%\section{Problema a abordar}
+
+	
+%\section{Algoritmo utilizado: Método Formas de Contexto}
+%\subsubsection{Filtros aplicados}
+%\subsection{Capas superficiales}
+%\subsection{Viabilidad de una pose}
+%\subsection{Puntuación de la pose $\pi$}
+%Si la pose evaluada no presenta superposición grande o aguda, es puntuada empleando para ello el cálculo del BSA. Luego, se clasifica junto al resto de formas de contexto.
+
+%\subsection{Datos de Entrada}
+%\section{Softwares y lenguajes utilizados}
+%\subsection{Plataforma de Desarrollo}
+%\subsection{UCSF Chimera}
+%\subsection{Programa MSMS}
+%\subsection{Blender}
+%\subsection{Software VMD}
+%section{Lenguajes}
+\section{Diseño de Arquitectura}
+
+\subsection{Configuración Inicial del Entorno}
+
+Para el desarrollo y análisis de los algoritmos, se configuró un entorno de trabajo basado en herramientas de código abierto y estándares de la comunidad científica. El entorno de desarrollo se estructuró en las siguientes capas:
+
+\subsubsection{a) Herramientas de Desarrollo y Análisis}
+
+\begin{itemize}
+    \item \textbf{Lenguaje de programación}: Python 3.12, seleccionado por su ecosistema robusto para computación científica y procesamiento de imágenes astronómicas
+    \item \textbf{Profiling y análisis de rendimiento}: \texttt{cProfile} para identificación de cuellos de botella, complementado con \texttt{psutil} para monitoreo de recursos del sistema
+    \item \textbf{Procesamiento de datos}: NumPy y SciPy para operaciones matriciales y algebraicas, fundamentales para los cálculos de covarianza e inversión de matrices en PACO
+    \item \textbf{Paralelización}: \texttt{joblib} para paralelización a nivel de CPU, evaluando diferentes backends (threading, loky, multiprocessing)
+    \item \textbf{Visualización y análisis}: Matplotlib, Pandas y Seaborn para generación de gráficos y análisis estadístico de resultados
+\end{itemize}
+
+\subsubsection{b) Repositorios y Código Base}
+
+\begin{itemize}
+    \item \textbf{PACO-master}: Repositorio original de PACO disponible en GitHub, que implementa fielmente el Algorithm 1 de Flasseur et al. (2018). Este código se utilizó sin modificaciones estructurales, aplicando únicamente correcciones mínimas de bugs para garantizar la correcta ejecución
+    \item \textbf{VIP Package 1.6.6}: Paquete de código abierto para procesamiento de imágenes de alto contraste, utilizado como referencia y para validación de resultados
+    \item \textbf{Datasets}: Datos sintéticos generados para pruebas controladas y datos reales del Exoplanet Imaging Data Challenge (NACO Beta Pictoris y SPHERE V471 Tauri)
+\end{itemize}
+
+\subsubsection{c) Gestión de Resultados}
+
+Los resultados de profiling y benchmarking se almacenaron en formato JSON estructurado, permitiendo:
+\begin{itemize}
+    \item Reproducibilidad de experimentos mediante almacenamiento de configuraciones y resultados
+    \item Análisis posterior mediante scripts de Python
+    \item Generación automatizada de visualizaciones y reportes
+\end{itemize}
+
+\subsection{Arquitectura de Implementación Final}
+
+La arquitectura del sistema de análisis se organiza en tres componentes principales que reflejan el flujo de trabajo del proceso de optimización:
+
+\begin{enumerate}
+    \item \textbf{Módulo de Profiling}: Sistema de instrumentación que captura métricas de rendimiento durante la ejecución del código original, generando perfiles detallados por función
+    \item \textbf{Módulo de Benchmarking}: Sistema de evaluación que ejecuta el algoritmo bajo diferentes configuraciones de datasets, midiendo tiempo, throughput, uso de memoria y validando resultados científicos.
+    \item \textbf{Módulo de Análisis y Optimización}: Sistema de análisis que procesa los resultados de profiling y benchmarking para identificar oportunidades de optimización y cuantificar el impacto potencial de mejoras propuestas
+\end{enumerate}
+
+Esta arquitectura modular permite que cada componente se desarrolle y valide de forma independiente, facilitando la detección temprana de problemas y la iteración sobre mejoras específicas.
+
+\section{Estructura del Código}
+
+\subsection{Organización del Código de Análisis}
+
+El código desarrollado para el análisis de rendimiento se organiza siguiendo una estructura modular que separa las responsabilidades:
+
+\begin{itemize}
+    \item \textbf{Scripts de profiling}: Implementaciones que instrumentan el código PACO-master original para capturar métricas de rendimiento, exportando resultados en formato estructurado
+    \item \textbf{Scripts de benchmarking}: Implementaciones que ejecutan el algoritmo sobre diferentes datasets, midiendo métricas de rendimiento y validando resultados científicos
+    \item \textbf{Scripts de análisis}: Implementaciones que procesan los resultados almacenados, generando visualizaciones, estimando complejidad computacional y proyectando tiempos de ejecución
+    \item \textbf{Notebooks de análisis}: Documentos Jupyter que integran código, resultados y análisis en un formato reproducible y documentado
+\end{itemize}
+
+\subsection{Integración con Código Original}
+
+El análisis se realizó sobre el código original de PACO-master sin modificar su estructura interna. La integración se logró mediante:
+
+\begin{itemize}
+    \item \textbf{Instrumentación no invasiva}: Utilización de \texttt{cProfile} como decorador o contexto manager, sin requerir modificaciones al código fuente original
+    \item \textbf{Wrappers funcionales}: Funciones auxiliares que encapsulan llamadas al código original, facilitando la instrumentación y el manejo de errores
+    \item \textbf{Validación de resultados}: Comparación sistemática de resultados obtenidos con el código instrumentado versus ejecuciones sin instrumentación, asegurando que el overhead del profiling no afecte la validez de los resultados
+\end{itemize}
+
+\section{Desarrollo del Software}
+
+\subsection{Problemas Durante el Desarrollo}
+
+Durante el proceso de desarrollo y análisis, se identificaron y resolvieron varios desafíos técnicos:
+
+\subsubsection{a) Correcciones en el Código Original}
+
+El código del repositorio PACO-master presentó dos problemas menores que requirieron corrección para permitir la ejecución correcta del algoritmo:
+
+\begin{enumerate}
+    \item \textbf{Parámetro \texttt{m\_p\_size}}: Error en la inicialización de un parámetro relacionado con el tamaño del patch, que causaba fallos en la ejecución. Se corrigió ajustando el valor según la documentación del algoritmo original.
+    \item \textbf{Parámetro \texttt{angles}}: Inconsistencia en el manejo de ángulos de rotación que afectaba el cálculo de posiciones transformadas. Se corrigió alineando la implementación con la especificación del algoritmo en el paper original.
+\end{enumerate}
+
+Estas correcciones fueron mínimas y no afectaron la lógica fundamental del algoritmo, manteniendo la fidelidad a la implementación original de Flasseur.
+
+\subsubsection{b) Desafíos en el Profiling}
+
+El análisis de profiling presentó varios desafíos técnicos:
+
+\begin{itemize}
+    \item \textbf{Overhead del profiler}: El uso de \texttt{cProfile} introduce un overhead que puede afectar las mediciones de tiempo, especialmente en funciones que se ejecutan muchas veces. Se mitigó mediante ejecuciones de calentamiento y promediado de múltiples ejecuciones.
+    \item \textbf{Granularidad de medición}: La identificación precisa de cuellos de botella requiere balancear entre granularidad (detalle por función) y overhead (tiempo adicional de instrumentación). Se utilizó un enfoque jerárquico que primero identifica funciones de alto nivel y luego profundiza en subcomponentes.
+    \item \textbf{Análisis de dependencias}: La comprensión de cómo las funciones se relacionan entre sí requiere análisis manual del código fuente complementado con los resultados del profiling, ya que \texttt{cProfile} no captura directamente las dependencias lógicas.
+\end{itemize}
+
+\subsubsection{c) Desafíos en el Benchmarking}
+
+\begin{itemize}
+    \item \textbf{Variabilidad en tiempos de ejecución}: Los tiempos de ejecución pueden variar debido a factores externos (carga del sistema, gestión de memoria del sistema operativo). Se mitigó mediante múltiples ejecuciones y reporte de estadísticas (media, desviación estándar).
+    \item \textbf{Escalabilidad de datasets grandes}: La ejecución de benchmarks completos sobre imágenes completas de datasets reales requeriría días o semanas. Se resolvió mediante proyección de tiempos basada en modelos de escalabilidad obtenidos de datasets más pequeños.
+    \item \textbf{Validación de resultados científicos}: Asegurar que las optimizaciones propuestas no comprometen la precisión científica requiere comparación sistemática de resultados. Se implementó validación automática comparando valores de SNR y mapas de detección.
+\end{itemize}
+
+\subsection{Pruebas, Optimización y Métricas Finales}
+
+\subsubsection{Estrategia de Pruebas}
+
+Las pruebas se organizaron en tres niveles:
+
+\begin{enumerate}
+    \item \textbf{Pruebas unitarias}: Validación de funciones individuales optimizadas (ej: \texttt{sampleCovariance\_optimized}) comparando resultados con implementaciones originales sobre datasets de prueba pequeños
+    \item \textbf{Pruebas de integración}: Validación de que las optimizaciones funcionan correctamente cuando se integran en el flujo completo del algoritmo
+    \item \textbf{Pruebas de rendimiento}: Benchmarking comparativo entre código original y versiones optimizadas, midiendo speedup y validando que la precisión científica se mantiene
+\end{enumerate}
+
+\subsubsection{a) Métricas de Validación}
+
+Para cada optimización propuesta, se midieron las siguientes métricas:
+
+\begin{itemize}
+    \item \textbf{Métricas de rendimiento}:
+    \begin{itemize}
+        \item Tiempo de ejecución total (segundos)
+        \item Throughput (píxeles por segundo)
+        \item Uso de memoria (MB)
+        \item Speedup relativo al código original
+    \end{itemize}
+    
+    \item \textbf{Métricas de precisión científica}:
+    \begin{itemize}
+        \item SNR máximo y promedio en mapas de detección
+        \item Diferencia relativa en valores de SNR (debe ser $< 0.1\%$)
+        \item Validación visual de mapas de detección (comparación cualitativa)
+    \end{itemize}
+    
+    \item \textbf{Métricas de estabilidad numérica}:
+    \begin{itemize}
+        \item Número de casos con matrices singulares o casi singulares
+        \item Robustez ante diferentes condiciones de ruido
+        \item Consistencia de resultados entre ejecuciones múltiples
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{b) Proceso de Optimización Iterativa}
+
+El proceso de optimización siguió un enfoque iterativo:
+
+\begin{enumerate}
+    \item \textbf{Identificación}: Análisis de profiling identifica función o operación candidata para optimización
+    \item \textbf{Diseño}: Diseño de optimización basado en principios de computación científica (vectorización, paralelización, uso de librerías optimizadas)
+    \item \textbf{Implementación}: Implementación de versión optimizada con validación funcional básica
+    \item \textbf{Validación}: Ejecución de pruebas de rendimiento y precisión científica
+    \item \textbf{Evaluación}: Decisión sobre incorporar la optimización basada en criterios de éxito (speedup $> 1.2\times$, precisión preservada, estabilidad mantenida)
+\end{enumerate}
+
+Este proceso iterativo permitió identificar y validar optimizaciones de forma sistemática, asegurando que cada mejora aporte valor real sin comprometer la calidad científica de los resultados.
+
+\section{Metodología}
+Este trabajo busca abordar la brecha técnica identificada, proponiendo una solución híbrida combinando la eficiencia computacional de PACO y la robustez estadística de RSM que permita preprocesar de forma eficiente las imágenes y clasificar señales planetarias usando modelos bayesianos entrenables a gran escala. Para ello se pretende diseñar un pipeline modular que opera en tres secuenciales:
+\begin{enumerate}
+    \item Etapa de Preprocesamiento (PACO-GPU)
+        \begin{itemize}
+        \item Implementación paralelizada en CUDA \cite{7482491}
+        \item Kernel optimizado para operaciones de covarianza local
+        \item Gestión de memoria mediante paginación GPU-CPU
+        \end{itemize}
+    \item Etapa de Inferencia (RSM-VI)
+        \begin{itemize}
+        \item Modelo generativo con capa estocástica
+        \item Esquema de entrenamiento semi-supervisado
+        \item Regularización basada en física óptica
+        \end{itemize}
+    \item Etapa de Postprocesamiento   
+        \begin{itemize}
+        \item Filtrado espacial adaptativo
+        \item Clasificación probabilística
+        \item Generación de mapas de incertidumbre
+        \end{itemize}
+\end{enumerate}
+La solución propuesta se basa en pilares técnicos bien establecidos como:\\
+\begin{enumerate}
+    \item Procesamiento paralelo en GPU: Implementaremos PACO utilizando CUDA para acelerar las operaciones matriciales, aprovechando trabajos previos en procesamiento de imágenes astronómicas. Esto reduciría el tiempo de preprocesamiento considerablemente.\\\\
+    \item Inferencia variacional (VI): En lugar del tradicional MCMC (Markov Chain Monte Carlo) usado en RSM, aplicaremos técnicas de machine learning bayesiano que permiten entrenamiento distribuido [6]. VI aproxima distribuciones complejas mediante modelos más simples y optimizables por gradiente descendente.
+    \item Precisión numérica mixta: Combinaremos cálculos en FP16 y FP32 siguiendo estándares establecidos por NVIDIA , lo que reduce los requerimientos de memoria sin afectar significativamente la calidad de los resultados.\\\\
+\end{enumerate}
+
+
+\subsubsection{- Especificaciones Técnicas}
+La mayoria de las funcionalidades necesarias se harán utilizando el VIP Package 1.6.6 cuyo repositorio es abierto \citep{VIP_github}, este tambien contiene datos de prueba a utilizar. 
+\section{Módulo PACO-GPU} El repositorio de PACO original, tambien abierto en github (no tiene version) que corresponde a \citep{PACO_github}
+\begin{enumerate}
+    \item Arquitectura: 3 capas de procesamiento paralelo
+        \begin{itemize}
+        \item Normalización y alineamiento
+        \item Descomposición PCA por bloques
+        \item Cálculo de covarianza local
+        \end{itemize}
+    \item Precisión numérica: FP16 para speckles, FP32 para señales    
+    \item Throughput: 42 imágenes/min (4096×4096 px)  
+\end{enumerate}
+\section{Módulo RSM-VI}
+\begin{enumerate}
+    \item Red bayesiana con 3 capas ocultas     
+    \item Función de pérdida: ELBO modificado \cite{sjölund2023tutorialparametricvariationalinference}
+    \item Optimizador: AdamW con warmup  
+    \item Tasa de aprendizaje: 1e-4 (decaimiento exponencial)    
+\end{enumerate}
+\section{Flujo de Datos} El pipeline maneja tres streams concurrentes.
+\begin{enumerate}
+    \item Stream de imágenes crudas (HDF5)    
+    \item Stream de parámetros instrumentales (JSON)
+    \item Stream de modelos pre-entrenados (ONNX)
+\end{enumerate}
+\section{Requisitos del Sistema} 
+\begin{enumerate}
+    \item Hardware: GPU NVIDIA con arquitectura Ampere+  
+    \item Software: CUDA 11.7, PyTorch 2.0+
+\end{enumerate}
+
+En la tabla \ref{tab:retos_solucion} se resumen los retos informáticos para las operaciones, el enfoque propuesto para cada uno de ellos y las tecnologías a utilizar.
+
+% Segunda tabla
+	\begin{table}[H]
+		\centering
+		\small
+		\begin{tabular}{p{5cm}p{5cm}p{5cm}}
+			\toprule
+			\textbf{Reto Computacional} &  
+                \textbf{Enfoque propuesto} &  
+                \textbf{Tecnologías Usadas}\\
+			\midrule
+			\textbf{Operaciones matriciales masivas}  & PACO en GPU     & CUDA, cuBLAS    \\
+			\midrule
+			\textbf{Inferencia lenta} & RSM con VI & PyTorch, Pyro     \\
+            \midrule
+            \textbf{Manejo de grandes datasets} & Pipelining eficiente & Dask, Memmap     \\
+			\midrule
+			\textbf{Precisión numérica} & FP16/FP32 mixtol & NVIDIA Tensor Cores     \\
+			\bottomrule
+		\end{tabular}
+        \caption{Retos Informáticos vs Solución propuesta}
+        \label{tab:retos_solucion}
+	\end{table}
+    \newpage
+\subsection{Diagrama de flujo de la solución propuesta}
+La Figura \ref{fig:diagrama-solucion} presenta el diagrama de flujo pipeline híbrido propuesto. Este diagrama ilustra las etapas principales del sistema y el flujo de datos entre ellas. Las formas romboidales representan estados intermedios de transformación de datos durante el procesamiento, no condiciones lógicas, sino puntos donde los datos cambian de formato o se integran múltiples flujos. Los colores del diagrama identifican las diferentes etapas: morado para PACO-GPU, rosado para RSM-VI, verde para postprocesamiento, y amarillo para entrada/salida del sistema.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm and 1.2cm,
+    box/.style={rectangle, rounded corners, minimum width=2cm, minimum height=0.6cm, text centered, draw=black, font=\scriptsize},
+    paco/.style={box, fill=blue!20},
+    rsm/.style={box, fill=purple!20},
+    post/.style={box, fill=green!20},
+    data/.style={diamond, aspect=2, minimum width=2cm, minimum height=0.6cm, text centered, draw=black, fill=orange!20, font=\scriptsize},
+    io/.style={box, fill=yellow!20},
+    arrow/.style={->, >=stealth, line width=0.5pt}
+]
+
+% Entrada
+\node (input) [io] {Entrada: Cubos FITS};
+
+% PACO-GPU - Primera fila
+\node (paco1) [paco, below=of input, xshift=-2.5cm] {Corrección píxeles};
+\node (paco2) [paco, right=of paco1] {Alineamiento};
+\node (paco3) [paco, right=of paco2] {PCA speckles};
+\node (paco4) [paco, right=of paco3] {Covarianza local};
+
+% Estado intermedio 1
+\node (inter1) [data, below=of paco2.south, xshift=0.6cm] {Imágenes procesadas};
+
+% RSM-VI - Segunda fila
+\node (rsm1) [rsm, below=of inter1, xshift=-1.8cm] {Modelo RSM};
+\node (rsm2) [rsm, right=of rsm1] {Inferencia VI};
+\node (rsm3) [rsm, right=of rsm2] {Optimización};
+\node (rsm4) [rsm, right=of rsm3] {Modelo jerárquico};
+
+% Estado intermedio 2
+\node (inter2) [data, below=of rsm2.south, xshift=0.6cm] {Mapas probabilidad};
+
+% Postprocesamiento - Tercera fila
+\node (post1) [post, below=of inter2, xshift=-1.2cm] {Clasificación};
+\node (post2) [post, right=of post1] {Mapas incertidumbre};
+\node (post3) [post, right=of post2] {Filtrado espacial};
+
+% Salida
+\node (output) [io, below=of post2] {Detecciones finales};
+
+% Conexiones principales
+\draw [arrow] (input) -- (paco1);
+\draw [arrow] (input) -- (paco2);
+\draw [arrow] (input) -- (paco3);
+\draw [arrow] (input) -- (paco4);
+
+\draw [arrow] (paco1) -- (inter1);
+\draw [arrow] (paco2) -- (inter1);
+\draw [arrow] (paco3) -- (inter1);
+\draw [arrow] (paco4) -- (inter1);
+
+\draw [arrow] (inter1) -- (rsm1);
+\draw [arrow] (inter1) -- (rsm2);
+\draw [arrow] (inter1) -- (rsm3);
+\draw [arrow] (inter1) -- (rsm4);
+
+\draw [arrow] (rsm1) -- (inter2);
+\draw [arrow] (rsm2) -- (inter2);
+\draw [arrow] (rsm3) -- (inter2);
+\draw [arrow] (rsm4) -- (inter2);
+
+\draw [arrow] (inter2) -- (post1);
+\draw [arrow] (inter2) -- (post2);
+\draw [arrow] (inter2) -- (post3);
+
+\draw [arrow] (post1) -- (output);
+\draw [arrow] (post2) -- (output);
+\draw [arrow] (post3) -- (output);
+
+\end{tikzpicture}
+\caption{Pipeline híbrido RSM-PACO para detección de exoplanetas. Los colores distinguen las etapas.}
+\label{fig:diagrama-solucion}
+\end{figure}
+
+
+
+\section{Metodología de Análisis de Rendimiento y Optimización}
+
+Para identificar las oportunidades de optimización en los algoritmos PACO y RSM, se diseñó e implementó una metodología sistemática de análisis de rendimiento que comprende tres fases principales: profiling, benchmarking y análisis de paralelización. Esta metodología permite identificar cuellos de botella computacionales, cuantificar el impacto de optimizaciones propuestas y validar que las mejoras no comprometen la precisión científica de los algoritmos.
+
+\subsection{Metodología de Profiling}
+
+El análisis de profiling constituye la primera fase del proceso de optimización, cuyo objetivo es identificar las funciones y operaciones que consumen la mayor fracción del tiempo de ejecución. Para este análisis se utilizó el código original del repositorio PACO-master, sin modificaciones que pudieran afectar la validez de los resultados, implementando únicamente correcciones mínimas de bugs (específicamente, correcciones en los parámetros \texttt{m\_p\_size} y \texttt{angles}) para garantizar la correcta ejecución del algoritmo.
+
+\subsubsection{a) Herramientas y Configuración}
+
+El profiling se realizó utilizando \texttt{cProfile}, el profiler estándar de Python, configurado para capturar información detallada sobre:
+\begin{itemize}
+    \item Tiempo acumulado (\texttt{cumtime}) y tiempo exclusivo (\texttt{tottime}) por función
+    \item Número de llamadas a cada función
+    \item Porcentaje del tiempo total consumido por cada componente
+    \item Jerarquía de llamadas y dependencias entre funciones
+\end{itemize}
+
+Los resultados del profiling se exportaron en formato JSON para facilitar el análisis posterior y la generación de visualizaciones. Para cada ejecución, se registraron métricas adicionales incluyendo el uso de memoria (mediante \texttt{psutil}), el throughput en píxeles por segundo, y los valores de SNR (Signal-to-Noise Ratio) obtenidos para validar que los resultados científicos se mantienen correctos.
+
+\subsubsection{b) Datasets de Prueba}
+
+Para garantizar la validez y generalización de los resultados, el análisis de profiling se ejecutó sobre múltiples configuraciones de datasets:
+
+\begin{enumerate}
+    \item \textbf{Datasets Sintéticos}: Tres configuraciones con diferentes tamaños:
+    \begin{itemize}
+        \item Small: 10 frames temporales, 32×32 píxeles (1,024 píxeles totales)
+        \item Medium: 20 frames temporales, 64×64 píxeles (4,096 píxeles totales)
+        \item Large: 30 frames temporales, 96×96 píxeles (9,216 píxeles totales)
+    \end{itemize}
+    
+    \item \textbf{Datasets Reales}: Dos datasets del Exoplanet Imaging Data Challenge:
+    \begin{itemize}
+        \item NACO Beta Pictoris: 61 frames de 101×101 píxeles (2.37 MB)
+        \item SPHERE V471 Tauri: 24 frames de 132×132 píxeles (1.60 MB)
+    \end{itemize}
+\end{enumerate}
+
+Esta diversidad de datasets permite analizar el comportamiento del algoritmo bajo diferentes condiciones: datasets pequeños para validación rápida, datasets medianos para análisis de escalabilidad, y datasets reales para validar que los resultados son aplicables a datos de observaciones astronómicas reales.
+
+\subsubsection{c) Identificación de Cuellos de Botella}
+
+La identificación de cuellos de botella se realizó mediante un análisis jerárquico del tiempo de ejecución:
+
+\begin{enumerate}
+    \item \textbf{Análisis de nivel superior}: Identificación de las funciones que consumen más del 5\% del tiempo total
+    \item \textbf{Análisis de descomposición}: Para cada función identificada, análisis de sus subcomponentes y operaciones internas
+    \item \textbf{Análisis de escalabilidad}: Evaluación de cómo el porcentaje de tiempo consumido por cada función varía con el tamaño del dataset
+    \item \textbf{Análisis de dependencias}: Identificación de funciones que son llamadas múltiples veces y que podrían beneficiarse de optimización
+\end{enumerate}
+
+Este proceso iterativo permite identificar no solo las funciones más costosas, sino también entender por qué son costosas y qué optimizaciones serían más efectivas.
+
+\subsection{Metodología de Benchmarking}
+
+El benchmarking se diseñó para cuantificar el rendimiento del algoritmo bajo diferentes condiciones y validar las proyecciones de escalabilidad. Cada ejecución de benchmark incluye:
+
+\subsubsection{a) Métricas de Rendimiento}
+
+\begin{itemize}
+    \item \textbf{Tiempo de ejecución total}: Medido utilizando \texttt{time.perf\_counter()} para alta precisión
+    \item \textbf{Throughput}: Calculado como píxeles procesados por segundo, permitiendo comparar eficiencia entre diferentes tamaños de datasets
+    \item \textbf{Uso de memoria}: Monitoreado mediante \texttt{psutil} para identificar posibles problemas de gestión de memoria
+    \item \textbf{SNR máximo y promedio}: Validación de que los resultados científicos se mantienen correctos
+\end{itemize}
+
+\subsubsection{b) Análisis de Escalabilidad}
+
+Para analizar la escalabilidad del algoritmo, se realizaron regresiones logarítmicas sobre los tiempos de ejecución medidos. La complejidad computacional se estima mediante:
+
+\begin{equation}
+    T(N) = a \cdot N^k
+\end{equation}
+
+donde $T(N)$ es el tiempo de ejecución para un dataset de tamaño $N$, $a$ es una constante, y $k$ es el exponente de complejidad. Aplicando logaritmo natural a ambos lados:
+
+\begin{equation}
+    \ln(T(N)) = \ln(a) + k \cdot \ln(N)
+\end{equation}
+
+El exponente $k$ se estima mediante regresión lineal sobre los datos transformados, permitiendo cuantificar si el algoritmo escala de forma lineal ($k=1$), cuadrática ($k=2$), cúbica ($k=3$), o con algún otro comportamiento.
+
+\subsubsection{c) Proyección de Tiempos para Datasets Grandes}
+
+Utilizando los modelos de escalabilidad obtenidos, se proyectan los tiempos de ejecución para imágenes completas de datasets reales. Estas proyecciones permiten evaluar la viabilidad práctica del algoritmo sin necesidad de ejecutar benchmarks completos que podrían requerir días o semanas de tiempo de cómputo.
+
+\subsection{Metodología de Análisis de Paralelización}
+
+El análisis de paralelización tiene como objetivo identificar oportunidades para distribuir el trabajo computacional entre múltiples unidades de procesamiento. Este análisis se estructura en tres etapas:
+
+\subsubsection{a) Identificación de Paralelizabilidad}
+
+Se analiza el código fuente para identificar loops y operaciones que cumplen con los principios de Bernstein para paralelización:
+
+\begin{enumerate}
+    \item \textbf{Independencia de datos}: Las iteraciones del loop no dependen de resultados de otras iteraciones
+    \item \textbf{Ausencia de condiciones de carrera}: No hay acceso simultáneo a variables compartidas sin sincronización
+    \item \textbf{Granularidad adecuada}: El trabajo por iteración es suficiente para justificar el overhead de paralelización
+\end{enumerate}
+
+\subsubsection{b) Evaluación de Backends de Paralelización}
+
+Para algoritmos implementados en Python, se evalúan diferentes backends de paralelización disponibles en \texttt{joblib}:
+
+\begin{itemize}
+    \item \textbf{Threading}: Evalúa si las librerías utilizadas (NumPy, SciPy) liberan el Global Interpreter Lock (GIL)
+    \item \textbf{Loky}: Evalúa el overhead de procesos separados con memoria compartida
+    \item \textbf{Multiprocessing}: Evalúa el overhead de serialización de datos NumPy
+\end{itemize}
+
+La selección del backend óptimo se basa en mediciones empíricas de eficiencia y speedup obtenido con diferentes configuraciones.
+
+\subsubsection{c) Cálculo de Speedup Potencial}
+
+El speedup potencial se calcula utilizando la ley de Amdahl:
+
+\begin{equation}
+    S = \frac{1}{(1 - P) + \frac{P}{N}}
+\end{equation}
+
+donde $S$ es el speedup, $P$ es la fracción paralelizable del código, y $N$ es el número de cores. Sin embargo, este cálculo teórico se ajusta considerando la eficiencia observada empíricamente, que típicamente disminuye con el número de cores debido a efectos de contención de memoria y overhead de sincronización.
+
+\subsection{Estrategia de Optimización}
+
+Basándose en los resultados del profiling y análisis de paralelización, se diseñó una estrategia de optimización incremental que permite implementar mejoras de forma independiente y medir su impacto individual.
+
+\subsubsection{a) Principios de la Estrategia}
+
+\begin{enumerate}
+    \item \textbf{Optimización basada en datos}: Todas las optimizaciones se basan en evidencia cuantitativa del profiling, no en suposiciones
+    \item \textbf{Incrementalidad}: Las optimizaciones se implementan y validan de forma independiente, permitiendo combinar aquellas que demuestran mayor efectividad
+    \item \textbf{Preservación de precisión}: Cada optimización se valida para asegurar que no compromete la precisión científica del algoritmo
+    \item \textbf{Compatibilidad}: Las optimizaciones se diseñan para ser compatibles con el código existente, facilitando su adopción
+\end{enumerate}
+
+\subsubsection{b) Categorías de Optimizaciones}
+
+Las optimizaciones propuestas se clasifican en tres categorías principales:
+
+\begin{enumerate}
+    \item \textbf{Optimizaciones algorítmicas}: Mejoras en la implementación de algoritmos específicos (ej: vectorización de operaciones)
+    \item \textbf{Optimizaciones de paralelización}: Distribución del trabajo entre múltiples cores o unidades de procesamiento
+    \item \textbf{Optimizaciones de librerías}: Utilización de implementaciones más eficientes de operaciones comunes (ej: \texttt{scipy.linalg.inv} vs \texttt{np.linalg.inv})
+\end{enumerate}
+
+\subsubsection{c) Proceso de Validación}
+
+Cada optimización propuesta se valida mediante:
+
+\begin{itemize}
+    \item \textbf{Validación funcional}: Verificación de que los resultados son idénticos (dentro de tolerancia numérica) a los del código original
+    \item \textbf{Validación de rendimiento}: Medición del speedup obtenido mediante benchmarking comparativo
+    \item \textbf{Validación de estabilidad}: Verificación de que la optimización mejora o mantiene la estabilidad numérica
+\end{itemize}
+
+\subsection{Criterios de Éxito}
+
+La metodología de optimización considera exitosa una mejora si cumple con los siguientes criterios:
+
+\begin{enumerate}
+    \item \textbf{Speedup significativo}: Mejora de al menos 1.2× en el tiempo de ejecución
+    \item \textbf{Precisión preservada}: Diferencias en resultados científicos inferiores al 0.1\%
+    \item \textbf{Estabilidad mejorada o mantenida}: La optimización no introduce inestabilidades numéricas
+    \item \textbf{Implementabilidad}: La optimización puede implementarse sin requerir cambios arquitecturales mayores
+\end{enumerate}
+
+Estos criterios aseguran que las optimizaciones propuestas sean tanto efectivas como prácticas de implementar en un contexto de investigación científica, donde la precisión y reproducibilidad son tan importantes como el rendimiento.
+
+\section{Conclusión del Capítulo}
+
+Este capítulo ha presentado la metodología completa del trabajo, abarcando desde el diseño de arquitectura y configuración del entorno hasta la estrategia sistemática de análisis de rendimiento y optimización. 
+
+Se describió el pipeline híbrido RSM-PACO propuesto, detallando sus componentes principales y el flujo de datos entre ellos. Se presentó la configuración del entorno de desarrollo, incluyendo las herramientas utilizadas para profiling, benchmarking y análisis, así como la estructura del código desarrollado y su integración con el código original de PACO-master.
+
+Se documentaron los desafíos técnicos encontrados durante el desarrollo, incluyendo las correcciones necesarias en el código original y los retos enfrentados en el proceso de profiling y benchmarking. Se estableció una estrategia de pruebas en tres niveles (unitarias, integración y rendimiento) con métricas de validación que aseguran tanto el rendimiento como la precisión científica.
+
+Finalmente, se presentó la metodología sistemática de análisis de rendimiento y optimización, que comprende profiling, benchmarking y análisis de paralelización. Esta metodología proporciona un marco estructurado para identificar y cuantificar oportunidades de optimización, mientras que la estrategia de optimización incremental permite implementar mejoras de forma controlada y validada, asegurando que cada optimización cumpla con criterios estrictos de éxito.
+
+En el siguiente capítulo se presentan los resultados obtenidos mediante la aplicación de esta metodología, incluyendo la identificación de cuellos de botella, el análisis de escalabilidad y las optimizaciones propuestas con sus respectivos speedups estimados.

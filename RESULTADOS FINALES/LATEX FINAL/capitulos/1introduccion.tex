@@ -1,0 +1,250 @@
+En el campo de la astronomía moderna, el procesamiento de imágenes de alto contraste representa un desafío computacional único que combina técnicas avanzadas de computación de alto rendimiento con análisis estadístico especializado \cite{Follette_2023}. Este tipo de procesamiento se aplica cuando necesitamos detectar objetos extremadamente tenues como exoplanetas -planetas que orbitan estrellas fuera del sistema solar- junto a fuentes de luz intensamente brillantes como lo son sus estrellas anfitrionas.\\ Para ello existen diversos métodos o técnicas para detectar y caracterizar exoplanetas, entre estos se encuentra la imagen directa.
+Esta técnica busca capturar directamente la luz reflejada por los planetas de las estrellas que orbitan, lo que permitiría caracterizar sus atmósferas y condiciones físicas. Sin embargo, el problema fundamental radica en que estos objetos son extraordinariamente tenues en comparación con sus estrellas anfitrionas, típicamente entre 1 y 100 millones de veces más débiles  \cite{NAP25187}.\\
+Este desbalance de intensidades plantea retos computacionales que han motivado el desarrollo de algoritmos especializados durante la última década. La dificultad principal no reside solamente en la debilidad de la señal, sino en la naturaleza estructurada del ruido dominante en estas imágenes. Los telescopios modernos terrestres equipados con óptica adaptativa, como el Very Large Telescope (VLT) \citep{ESO_AdaptiveOptics_ELT}, pueden corregir en tiempo real las distorsiones causadas por la atmósfera terrestre, pero aún dejan patrones residuales complejos conocidos como "speckles". Estos artefactos presentan características espaciales y temporales que los hacen particularmente engañosos, ya que pueden persistir durante varias observaciones y mimetizar perfectamente la apariencia esperada de un exoplaneta. Aquí es donde la computación juega un papel crucial ya que los algoritmos especializados deben limpiar las imágenes de ruido sistemático, identificar posibles planetas entre los artefactos restantes y hacer esto de manera eficiente para procesar miles de imágenes.\\
+\newpage
+\begin{figure}[h]
+    \centering
+    \includegraphics[height=6cm]{challenge_fig2.001}
+    \caption{Representación esquemática del flujo de procesamiento de datos de imagen de alto contraste. Caso de un cubo de datos de la estrella HR8799 (Exoplanet Imaging Data Challenge 1, Copyright (c) 2018 Carlos Alberto Gomez Gonzalez, MIT License. \cite{ExoplanetImagingChallenge}).}
+    \label{edicraw}
+\end{figure}
+
+
+El proceso, como se ve en la figura \ref{edicraw}, comienza con imágenes crudas en formato FITS \citep{refId0} -el formato estándar en astronomía, como JPEG pero con datos del telescopio añadidos- las cuales son esencialmente matrices numéricas multidimensionales. Estas imágenes pasan por una cadena de preprocesamiento básico donde se hace una limpieza de las imágenes, por ejemplo, corrigiendo los píxeles muertos o defectuosos. Luego se realiza el alineamiento con precisión subpixel usando correlación cruzada y  técnicas especializadas de imagen diferencial  como lo son las secuencias ADI (Angular Differential Imaging) \citep{refId1} que 
+consisten en múltiples imágenes tomadas mientras el telescopio gira, lo que hace que los exoplanetas (objetos móviles) cambien de posición, mientras que el ruido instrumental (speckles) permanece fijo, lo que permite separar señales planetarias de artefactos mediante alineamiento y resta; y secuencias SDI (Spectral Differential Imaging) que capturan la misma escena en diferentes longitudes de onda o colores, aprovechando que los planetas tienen firmas espectrales distintas al ruido. Al comparar estas imágenes, se suprimen los artefactos que varían con el color, mejorando la detección. Estas técnicas generan cubos de datos 3D (tiempo × espacio × longitud de onda) donde cada frame pesa entre 16MB y 64MB aproximadamente y estos cubos de datos son sometidos a técnicas de reducción de ruido y mejora de contraste \citep{Samland_2022}. Esto nos plantea desafíos computacionales específicos como lo son el manejo de datos masivos, ya que una sola observación puede generar más de 100GB de datos y requieren procesamiento para imágenes con una resolución mayor o igual a 2K×2K \citep{refId2}. Además del manejo de cálculos matemáticos complejos ya que se realizan operaciones matriciales masivas que deben ejecutarse eficientemente en GPU.
+
+Actualmente, los observatorios como VLT y el James Webb Space Telescope (JWST) generan volúmenes de datos que exceden los 250GB por noche \cite{article}, demandando algoritmos que no solo sean precisos, sino también computacionalmente eficientes y escalables.
+
+
+
+\section{Presentación de los procesos del ámbito del proyecto}\label{procesos}
+
+La investigación se centra en dos procesos computacionales fundamentales para la detección y caracterización de exoplanetas. El primero es la reducción de speckles mediante PACO (Principal Component Analysis plus Covariance) \citep{paco}. Los componentes principales son vectores ortogonales que representan los patrones dominantes de variabilidad en los datos, obtenidos mediante descomposición matricial de las imágenes de entrada. PACO opera en tres etapas principales:
+\begin{enumerate}
+    \item Descomposición espectral de la secuencia de imágenes usando PCA (Análisis de componentes principales) para identificar los patrones dominantes de ruido, PCA toma muchas imágenes con ruido e identifica patrones repetitivos para luego separar esos patrones molestos(componentes principales) de lo que cambia entre imágenes.
+
+    \item Modelado de covarianza local que analiza las variaciones espaciales del ruido residual.
+
+    \item Reconstrucción y sustracción selectiva de los artefactos. Este proceso, que tradicionalmente se implementa en CPU, requiere operaciones matriciales masivas sobre conjuntos de datos que pueden superar los 100GB, presentando desafíos significativos de paralelización y gestión de memoria. 
+\end{enumerate}
+El segundo proceso clave es la detección bayesiana mediante RSM (Regime Switching Model) \cite{rsm}, que aborda el problema desde una perspectiva estadística rigurosa. RSM modela explícitamente la probabilidad de que un píxel dado contenga solo ruido residual o una señal planetaria genuina, ofreciendo ventajas teóricas como cuantificación natural de incertidumbre y mayor robustez frente a falsos positivos. Sin embargo, su implementación clásica mediante Markov Chain Monte Carlo (MCMC) resulta computacionalmente muy compleja, requiriendo días de procesamiento por imagen en configuraciones estándar.
+
+	% Primera tabla
+	\begin{table}[H] 
+		\centering
+		\small
+		\begin{tabular}{p{5cm}p{5cm}p{5cm}}
+			\toprule
+			\textbf{Concepto Astronómico} &  
+                \textbf{Técnica Computacional} &  
+                \textbf{Complejidad}\\
+			\midrule
+			\textbf{Supresión de speckles}  & PCA + Covarianza     & \(O(n^2 log n)\)     \\
+			\midrule
+			\textbf{Detección de señales} & Modelado        Bayesiano & \(O(n^3)\)     \\
+			\midrule
+			\textbf{Mejora de contraste} & Filtrado espacial & \(O(n^2)\)     \\
+			\bottomrule
+		\end{tabular}
+        \caption{Correspondencia entre Conceptos y Técnicas Computacionales}
+        \label{tablaejemplo}
+	\end{table}
+	
+La interacción óptima entre estos dos procesos - limpieza inicial con PACO seguida de análisis estadístico con RSM - constituye el núcleo de la investigación, buscando superar las limitaciones actuales en sensibilidad y escalabilidad mediante innovaciones algorítmicas y paralelización CPU/GPU. La Tabla \ref{tablaejemplo} relaciona algunos conceptos y operaciones astronómicas junto con la técnica computacional que utilizan y las complejidades temporales de cada una.\\
+
+
+
+\section{Descripción del Problema}\label{problema}
+La detección de exoplanetas mediante imágenes directas es un desafío computacional relevante, ya que implica identificar señales extremadamente débiles en imágenes dominadas por ruido estructurado. Para lograr esto, se utilizan tecnologías como óptica adaptativa (para corregir en tiempo real las distorsiones causadas por la atmósfera) y coronógrafos (que bloquean la luz directa de la estrella para mejorar el contraste).
+
+El principal obstáculo desde el punto de vista del procesamiento de imágenes radica  en separar las señales planetarias que son entre $10^{-6}$ a $10^{-4}$ veces más debiles que su estrella asociada, del ruido estructurado, tambien llamado speckless o speckle noise. Éstos son artefactos ópticos que aparecen como patrones de interferencia en las imagenes  y son generados por imperfecciones instrumentales -por ejemplo, los espejos telescópicos- y turbulencia atmosferica residual. Además los speckless no son estacionarios, es decir, varían en tiempo/espacio; y su intensidad puede llegar a ser hasta \(\approx10^6 \) veces más fuerte que la señal objetivo.\\
+Para abordar este problema, se han desarrollado algoritmos como PACO y RSM, que aplican técnicas de procesamiento estadístico y aprendizaje automático para modelar y separar la señal del ruido. No obstante, ambos presentan limitaciones:
+
+PACO utiliza PCA para modelar el ruido local en las imágenes y detectar anomalías. Si bien es eficiente y se puede paralelizar en CPU, sufre pérdida de sensibilidad en zonas cercanas a la estrella, menores a 0.3 arcosegundos, lo que equivale a aproximadamente 3 unidades astronómicas (3 veces la distancia entre la tierra y el sol) o 10 parsec (3.2616 años luz),  debido a un exceso de suavizado que elimina tanto el ruido como las señales débiles \cite{complexpaco}. Además, requiere un ajuste manual del número de componentes de PCA, lo que complica la optimización de hiperparámetros.\\
+RSM adopta un enfoque bayesiano, modelando cada píxel como una mezcla probabilística entre señal y ruido, y aplicando inferencia con MCMC. Este enfoque es más preciso para distinguir verdaderas señales planetarias, pero su alto costo computacional(<72h/objetivo en CPU) para surveys masivos \citep{complexrsm} como por ejemplo el ELT(Extremely Large Telescope) \(\approx10^4 \) estrellas objetivo- ya que el MCMC requiere millones de iteraciones/píxel (\((O(n^3)\) en CPU), lo que lo hace no escalable e inviable para imágenes de 2Kx2K que son tipicas en astronomía.\\
+Por lo tanto, se identificó una brecha técnica importante, haciendo falta un framework que preprocese eficientemente (acelerando PACO en GPU) y clasifique señales con modelos bayesianos escalables como RSM que utiliza el método de inferencia tradicional pero reemplazandolo por Inferencia Variacional
+
+
+\section{Propuesta de Solución}
+En base a las brechas técnicas identificadas, se clarifica la necesidad de métodos que sean computacionalmente eficientes y estadísticamente robustos. En particular, se propone una solución híbrida que combina dos enfoques complementarios: PACO, que permite suprimir ruido estructurado de forma eficiente, y RSM, que permite detectar patrones estadísticamente significativos en presencia de señales débiles. Mientras que PACO destaca por su velocidad y escalabilidad, RSM ofrece una mayor sensibilidad en la detección de señales planetarias, aunque a un mayor costo computacional. Se busca integrar ambas metodologías en un pipeline modular que aprovecha la capacidad de cómputo paralelo de las GPU modernas para procesar grandes volúmenes de datos sin sacrificar precisión.\\
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[height=8cm]{capitulos/diagramapipeline.png}
+
+    \caption{Diagrama del pipeline propuesto.}
+    \label{diagpipe}
+\end{figure}
+
+
+La arquitectura propuesta  en la figura \ref{diagpipe} consta de tres etapas principales. En primer lugar, se realiza un preprocesamiento standard donde se realizará la calibración y normalización de datos, alineamiento subpixel, reducción de ruido instrumental, etc. y luego se pasará a la segunda etapa donde se encuentra el procesamiento acelerado por GPU, donde se implementará PACO utilizando CUDA para optimizar operaciones locales de covarianza sobre parches de imagen. Esto permite limpiar las imágenes sin eliminar las posibles señales planetarias. Al mismo tiempo, en paralelo en esta segunda etapa, se introducirá un modelo generativo con inferencia variacional que reemplazará técnicas tradicionales como MCMC, permitiendo entrenar RSM de forma escalable mediante optimización basada en gradientes. Este modelo incorpora información instrumental y restricciones físicas para mejorar su capacidad de generalización.\\ Finalmente, la etapa de postprocesamiento se encargará de la clasificación probabilística de detecciones, generación de mapas de incertidumbre y filtrado espacial adaptativo. El sistema completo operará sobre flujos de datos paralelos -imágenes, parámetros instrumentales, además de modelos preentrenados- y estará optimizado para trabajar con precisión numérica mixta (FP16 y FP32), lo cual mejorará el rendimiento sin afectar la calidad del análisis.\\\\
+
+
+
+Esta necesidad aumentará con la próxima generación de telescopios como el ELT, que generará cientos de gigabytes de datos por noche. Esta propuesta busca desarrollar una solución híbrida que combine lo mejor de ambos enfoques: la velocidad de PACO y la precisión de RSM, optimizada para hardware moderno como GPUs NVIDIA.\\
+
+Para evaluar el método propuesto, se utilizarán datos sintéticos generados con el paquete pynpoint \cite{pynpoint}, que simula condiciones reales de observación. Esto nos entregará datos de referencia conocidos y verificados que nos permitan evaluar objetivamente el rendimiento de un algoritmo. Además, también utilizarán datos reales, imágenes públicas de SPHERE/VLT \cite{ESO_SPHERE_InstrumentPage} y JWST \cite{WebbTelescope_Images}, donde existen candidatos conocidos para validación.\\Las métricas claves serán:
+\begin{itemize}
+    \item Tasa de recuperación (recall) para señales débiles
+    \item Precisión en la posición de planetas detectados
+    \item Tiempo de procesamiento por imagen
+    \item Uso de memoria en GPU
+\end{itemize} 
+El impacto esperado sería permitir la detección de planetas terrestres alrededor de estrellas cercanas, objetivo clave de misiones como HARMONI/ELT (High Angular Resolution Monolithic Optical and Near-infrared Integral field spectrograph), establecer nuevos benchmarks para inferencia bayesiana en imágenes y desarrollar técnicas aplicables a otros campos, por ejemplo, medicina, que trabajen con ruido estructurado.
+\subsection{Objetivo General}
+Desarrollar e implementar un pipeline computacional híbrido que combine los algoritmos PACO y RSM para la detección de exoplanetas en imágenes de alto contraste, acelerado para arquitecturas GPU y que supere las limitaciones de sensibilidad y escalabilidad de los métodos actuales.
+
+\subsection{Objetivos Específicos}
+El presente proyecto de investigación se estructura en torno a cuatro objetivos específicos claramente definidos y medibles:
+\begin{itemize}
+    \item
+    \textbf{{Objetivo Específico 1: Revisión bibliográfica e implementación base:}}\\Revisar exhaustivamente la bibligrafía existente para luego implementar cada algoritmo o método individualmente y generar un benchmark a utilizar para comparar con la implementación del pipeline.
+    \item \textbf{{Objetivo Específico 2: Acelerar el algoritmo PACO mediante computación GPU:}}
+    Implementar una versión acelerada del algoritmo PACO en CUDA que reduzca el tiempo de procesamiento de imágenes astronómicas cpm comparado con la implementación CPU de referencia, manteniendo la precisión numérica y validando resultados con datos sintéticos.
+    \item \textbf{Objetivo Específico 3: Desarrollar RSM con inferencia variacional escalable:}
+Reducir la complejidad computacional del algoritmo RSM de O(n³) a O(n) mediante la implementación de inferencia variacional en PyTorch, logrando procesar imágenes de 2K×2K en menor tiempo mientras se mantiene una precisión equivalente al 95\% del método MCMC tradicional( debido a que MCMC a diferencia de VI es asintóticamente exacto), haciendolo escalable.
+    \item \textbf{Objetivo Específico 4: Integrar ambos algoritmos en un pipeline híbrido optimizado:}
+Desarrollar un sistema integrado RSM-PACO que mejore las métricas de detección (FDR/MDR)  comparado con el mejor método individual, implementando gestión eficiente de memoria GPU y flujo de datos optimizado para procesamiento de surveys masivos.
+    \item \textbf{Objetivo Específico 5: Validar el método propuesto con datos astronómicos reales:}
+Demostrar las ventajas del pipeline híbrido mediante validación con datos sintéticos controlados y observaciones reales de SPHERE/VLT, comparando cuantitativamente contra métodos baseline (PCA, LOCI, PACO standalone) usando métricas estándar en astronomía.
+\end{itemize}
+
+\subsection{Descripción de actividades}
+Las actividades a realizar se organizan en etapas asociadas a cada objetivo, cada una con tareas concretas y entregables medibles, alineadas con el cronograma detallado del proyecto:
+
+\subsubsection{Etapa 1: Preparación}
+Las actividades de preparación, asociadas al objetivo 1 incluyen:
+\begin{itemize}
+    \item Revisión bibliográfica exhaustiva de RSM y PACO
+    \item Aprendizaje intensivo de CUDA y programación en GPU
+    \item Setup del entorno de desarrollo (CUDA, PyTorch, herramientas astronómicas)
+    \item Familiarización con datos FITS y procesamiento astronómico
+    \item Estudio de métricas de evaluación específicas del dominio
+    \item Implementación de carga y preprocesamiento de datos FITS
+    \item Implementación de algoritmos de alineamiento subpíxel
+    \item Prototipo de PCA básico en CPU como referencia
+\end{itemize}
+
+\subsubsection{Etapa 2: Desarrollo nuevos algoritmos}
+Esta etapa se subdivide en dos subetapas correspondientes a los objetivos 2 y 3:
+\begin{itemize}
+\item Subetapa 1, desarrollo y mejoras PACO
+    \begin{itemize}
+        \item Implementación de PACO base repositorio original
+        \item Implementación de PACO en libreria/paquete VIP
+        \item Implementación acelerada en CPU y pruebas
+        \item Implementación de kernels CUDA para covarianza local
+        \item Implementación de PACO acelerado en GPU
+        \item Medición métricas de desempeño respecto a algoritmo base
+    \end{itemize} 
+    \item Subetapa 2, desarrollo y mejoras RSM
+    \begin{itemize}
+        \item Implementación base RSM con MCMM
+        \item Medición rendimiento version base, identificación de problemas de implementación y mejoras al algoritmo.
+        \item Desarrollo de RSM básico con inferencia variacional
+        \item Medición métricas de desempeño respecto a algoritmo base
+    \end{itemize}
+    
+\end{itemize}
+
+\subsubsection{Etapa 3: Implementación del Pipeline Híbrido}
+Las actividades de integración avanzada asociadas al objetivo 4 incluyen:
+\begin{itemize}
+    \item Integración completa de PACO optimizado para GPU
+    \item Optimización avanzada de manejo de memoria GPU
+    \item Desarrollo del pipeline híbrido RSM-PACO
+    \item Calibración y ajuste con datos sintéticos
+    \item Implementación de pruebas unitarias y debugging
+\end{itemize}
+
+\subsubsection{Etapa 4: Validación y Evaluación}
+Las actividades de validación científica asociadas al objetivo 5 comprenden:
+\begin{itemize}
+    \item Implementación de métricas FDR/MDR y análisis ROC
+    \item Benchmarks de rendimiento GPU vs CPU
+    \item Validación con datos reales de telescopios
+    \item Análisis de sensibilidad y robustez del método
+\end{itemize}
+
+\subsubsection{Etapa 5: Análisis Comparativo y Documentación}
+Las actividades de finalización incluyen:
+\begin{itemize}
+    \item Comparación sistemática con técnicas estado del arte
+    \item Documentación técnica completa del código
+    \item Redacción del informe final de tesis
+    \item Preparación de presentación y defensa
+\end{itemize}
+\newpage
+
+\section{Descripción de los Aspectos Fundamentales de la Metodología a utilizar en la Investigación}
+La Tabla \ref{tabla aspectos} caracteriza el proyecto a desarrollar, en distintos aspectos:
+{
+\sloppy
+\begin{table}[H]
+\begin{tabular}{|m{3cm}|m{1.5cm}|m{10.5cm}|}
+    \hline
+    Ítem & Nivel & Descripción \\
+    \hline
+    Tipo de investigación &  Aplicada  & Investigación orientada a resolver un problema, técnico-científico mediante el desarrollo de un nuevo enfoque computacional validado sobre datos reales y simulados.\\
+    \hline
+    Conocimiento del tema & Medio & Se dispone de comprensión sólida sobre el 
+    proceso de formación de imágenes astronómicas 
+    y los desafíos del ruido estructurado, pero
+    no hay un método establecido que
+    resuelva simultáneamente precisión y eficiencia.\\
+
+    \hline
+    Innovación metodológica  &  Alta & Se propone una combinación original de dos
+    enfoques (PACO y RSM), usando inferencia 
+    variacional y computación paralela,
+    lo que no ha sido explorado
+    en esta forma dentro del campo.\\ 
+
+    \hline
+    Reproducibilidad &  Alta & Todos los módulos del sistema serán
+    implementados utilizando herramientas
+    abiertas (CUDA, PyTorch, Pyro)
+    y sobre datasets públicos o generados con
+    software  reproducible (PynPoint).\\ 
+
+    \hline
+    Complejidad computacional & Alta & El método incluye operaciones de álgebra lineal 
+    mixta intensivas (PCA, covarianzas locales),
+    entrenamiento bayesiano, manejo de
+    precisión numérica y sincronización
+    múltiples flujos de datos.\\
+    \hline
+    Modularidad del sistema & Alta & El sistema se divide en tres módulos 
+    (preprocesamiento, inferencia, 
+    postprocesamiento) que pueden desarrollarse, 
+    evaluarse y optimizarse de manera independiente. \\
+    \hline
+    Escalabilidad &  Alta & El enfoque está diseñado para 
+    escalar en volumen de datos 
+    y adaptarse a futuros instrumentos 
+    de mayor resolución, como el ELT.\\
+    \hline
+\end{tabular}
+\caption{Tabla comparativa de aspectos a considerar/desarrollar en la investigación}
+   \label{tabla aspectos}
+\end{table}
+
+Dada la naturaleza exploratoria, computacional e incremental de la investigación, se utilizará una metodología iterativa basada en el desarrollo por módulos. Cada componente (PACO-GPU, RSM-VI, pipeline integrado) será diseñado, implementado, validado y optimizado de manera independiente. Este enfoque permite evaluar el impacto de cada parte del sistema sobre los objetivos generales, y facilita la detección temprana de limitaciones o cuellos de botella tanto computacionales como estadísticos.
+}
+%\section{Composición del informe}
+%El presente trabajo se encuentra dividido en xx capítulos. A continuación se describe brevemente el contenido de cada uno de ellos.
+
+%\begin{enumerate}
+    %\item \textbf{Introducción:} texto.
+
+    %\item \textbf{Bases Teóricas:}texto.
+    
+    %\item \textbf{Estado del Arte:} texto.
+    
+    %\item \textbf{Desarrollo del trabajo}texto.
+    
+   % \item \textbf{Resultados} texto.
+    
+    %\item \textbf{Conclusiones:} texto.
+%\end{enumerate}
+%Además, al final del informe se adjuntan las referencias con los artículos utilizados en el proceso de investigación.
